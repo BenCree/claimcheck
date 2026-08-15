@@ -11,13 +11,19 @@ cd example && snakemake -n && snakemake -c1        # ~4 seconds
 ```
 
 ```
-HOLDS    mean_auc_ef ~ mean_hits_found   claimed 0.83
-         within the 95% CI [0.780, 0.897] for r = 0.832, resampling 29 config(s)
-REFUTED  mean_auc_ef ~ mean_hits_found   claimed 0.99
-         lies OUTSIDE that interval
-  results/croissant.json  —  2 field(s), 2 claim(s), 1 refuted
-  results/graph.ttl       —  49 triples
+HOLDS    mace.e_int_kcal ~ affinity.experimental_pKD   claimed -0.5
+         within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)
+REFUTED  mace.e_int_kcal ~ mace.n_lig_atoms            claimed 0.0
+         OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589
+  results/croissant.json  —  2 record set(s), 3 field(s), 2 claim(s), 1 refuted
+  results/graph.ttl       —  71 triples
 ```
+
+Two datasets: MACE interaction energies **computed** by a rule, experimental
+affinities **imported by hand**, joined on `complex_name` at 100% coverage over
+637 rows. The claim that MACE energy tracks affinity holds — and the control
+says it tracks ligand *size* more tightly (−0.589 against −0.450), so ranking on
+it would select big molecules rather than good ones.
 
 ---
 
