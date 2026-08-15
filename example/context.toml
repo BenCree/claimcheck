@@ -1,0 +1,78 @@
+# Layer 2. Copy this file, point it at your CSV, edit the four blocks below.
+#
+# Layer 1 is Snakemake and there is nothing to configure: it makes the data and
+# records what it did. This file is the part Snakemake has no concept of —
+# what the columns MEAN, and what somebody claims about them.
+
+[dataset]
+name = "measurements"
+title = "Active-learning acquisition sweep"
+# The sentence a reader needs before the columns mean anything. Not optional:
+# a table nobody can interpret is not a dataset, it is a file.
+context = """
+Each row is one (representation, strategy) pair under one budget configuration,
+averaged over 400 seeds.
+"""
+files = ["data/measurements.csv"]
+
+# `mlcroissant` reports these four as recommended. They are emitted only if you
+# declare them — nothing here invents a licence or a date to silence a warning.
+license = "https://creativecommons.org/licenses/by/4.0/"
+version = "1.0.0"
+date_published = "2026-08-15"
+
+# Rows inside one `config` share their seeds and their budget, so they are not
+# independent. Naming the column here is what makes the confidence intervals
+# honest — resampling rows instead would report them about sqrt(30) too narrow.
+# Delete this line only if every row is genuinely independent.
+resampling_unit = "config"
+
+# --- what the numbers are -------------------------------------------------
+# `unit` is UDUNITS-2. "1" means dimensionless. Omit the key entirely if nobody
+# has declared a unit — absent and "1" mean different things, and any
+# relationship touching an undeclared column comes back `unverifiable`.
+
+[[variables]]
+name = "mean_auc_ef"
+unit = "1"
+description = "Area under the enrichment-factor curve, mean of 400 seeds."
+
+[[variables]]
+name = "mean_hits_found"
+unit = "1"
+description = "Actives acquired, mean of 400 seeds."
+
+# --- what somebody claims about them --------------------------------------
+# Each block is checked by recomputing it from the data. You get one of three
+# answers: `agrees`, `refuted`, or `unverifiable` (the data cannot tell — which
+# is not a pass).
+
+[[relationships]]
+x = "mean_auc_ef"
+y = "mean_hits_found"
+kind = "correlation"
+method = "pearson"
+claimed = 0.83
+[relationships.evidence]
+source = "both summarise the same acquired actives, so they should track closely"
+locator = "examples/start_here/context.toml"
+extracted_by = "human"
+
+[[relationships]]
+x = "mean_auc_ef"
+y = "mean_hits_found"
+kind = "correlation"
+method = "pearson"
+claimed = 0.99
+[relationships.evidence]
+source = "an LLM asked to summarise, rendering 'they measure the same thing' as a number"
+locator = "no source — kept here so a first run shows a refutation too"
+extracted_by = "llm"
+
+# ⚠️ READ THIS BEFORE COPYING. The 0.83 above was read off the first run of this
+# example. In your own project the claimed value comes from the paper you are
+# checking — never from the data you are checking it against. Choosing it after
+# seeing the interval guarantees agreement and measures nothing.
+#
+# It is written down here because a template that quietly modelled the wrong
+# ordering would teach it.

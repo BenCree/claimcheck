@@ -1,0 +1,61 @@
+# Layer 1. Snakemake, and nothing is added to it: it already records, per
+# output, the input digests as sha256, the code, the shell command, the conda
+# environment, a software-stack hash, and the times.
+#
+#   snakemake -n      # always first
+#   snakemake -c1
+#
+# The metadata rules take the data as an INPUT even though they read its path
+# from `context.toml`. That is deliberate: consuming it is what puts the
+# dataset's sha256 into Snakemake's own store, because Snakemake records a
+# digest for every input and none for its outputs. It is the whole receipt
+# mechanism, delegated.
+
+import sys
+
+PY = sys.executable
+
+
+rule all:
+    input:
+        "results/croissant.json",
+        "results/graph.ttl",
+
+
+rule check_claims:
+    input:
+        data="data/measurements.csv",
+        context="context.toml",
+    output:
+        "results/claims.json",
+    params:
+        py=PY,
+    shell:
+        "{params.py} -m claimcheck.relate . {output}"
+
+
+rule croissant:
+    input:
+        data="data/measurements.csv",
+        claims="results/claims.json",
+        context="context.toml",
+    output:
+        "results/croissant.json",
+    params:
+        py=PY,
+    shell:
+        "{params.py} -m claimcheck.croissant . {output}"
+
+
+# The only rule that needs the `graph` extra.
+rule graph:
+    input:
+        croissant="results/croissant.json",
+        claims="results/claims.json",
+        context="context.toml",
+    output:
+        "results/graph.ttl",
+    params:
+        py=PY,
+    shell:
+        "{params.py} -m claimcheck.graph . {output}"

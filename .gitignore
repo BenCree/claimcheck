@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Snakemake's own record. Rebuilt by `snakemake -c1`, and its filenames are
+# base64 of ABSOLUTE output paths, so committing it would freeze one machine.
+.snakemake/
+
+# The example's outputs. `tests/test_end_to_end.py` builds them in a copy so it
+# cannot pass by finding results somebody left behind.
+example/results/

@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EVERY DEPENDENCY HERE IS JUSTIFIED, AND `tests/test_dependencies.py` FAILS IF
+# ONE STOPS BEING USED.
+#
+# This repository exists because its predecessor accumulated two answers to the
+# same question. About 1,750 lines there implement things Snakemake,
+# `mlcroissant` and `runcrate` already do. The rule adopted to prevent that
+# happening again is:
+#
+#     If Snakemake already does it, do not build it again.
+#     If a dependency is declared, something must import it.
+#     If something is imported, it must be declared.
+#
+# The last two are mechanically enforced. The first is not enforceable in
+# general, so `test_dependencies.py` enforces the specific case that went wrong:
+# nothing here may write a run receipt, because Snakemake's metadata record
+# already is one.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[project]
+name = "claimcheck"
+version = "0.1.0"
+description = "A dataset arrives with its claims checked, and the checks recomputed rather than written."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Ben Cree" }]
+
+# THE CORE HAS NO DEPENDENCIES, and that is a checked property rather than an
+# aspiration — `test_the_core_needs_nothing_but_the_standard_library` blocks
+# every non-stdlib import in `relate.py` and `croissant.py` and then runs them.
+#
+# It matters because the two things this package does that nothing else does —
+# recompute a claim, and say "the data cannot tell" — must run wherever the data
+# is. A checker you cannot run on a cluster node because it wants a semantic-web
+# stack is a checker that does not get run.
+dependencies = []
+
+[project.optional-dependencies]
+# rdflib ONLY, and only for one module. `graph.py` joins the column-level
+# description to the claim-level one and emits Turtle; nothing else here needs
+# a graph library. Measured before choosing: conda-forge all-time downloads put
+# rdflib at 1,495,780 against owlready2's 892,228, and rdflib needs no JVM.
+graph = ["rdflib>=7.0"]
+
+# `mlcroissant` is a COMMAND, not an import. It validates what we emit; we never
+# call its API. Declaring it as a runtime dependency would pull a large tree
+# into every install to support a check that only developers run.
+#
+# NOT PRESENT, each for a measured reason:
+#   rocrate, roc-validator — RO-Crate is a second description of the same
+#       dataset. Croissant is the format this community reads, and a survey of
+#       227 packages found five workflow engines already emitting Workflow Run
+#       Crate with `runcrate` validating it. Emitting a third copy is work.
+#   pyshacl — needed only to validate DCAT against PSDI's shapes. If PSDI
+#       conformance is adopted, this comes back WITH the emitter, not before.
+#   linkml — generated a vocabulary this package does not have.
+dev = [
+  "pytest>=8",
+  "mlcroissant>=1.1",
+  "snakemake>=9",
+  "rdflib>=7.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["claimcheck"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
