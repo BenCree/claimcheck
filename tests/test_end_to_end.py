@@ -12,7 +12,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -112,7 +111,7 @@ def test_the_croissant_carries_units_croissant_itself_cannot_express(built):
     spec: no `unitText`, `unitCode`, `PropertyValue`, `variableMeasured`, no
     QUDT. So units ride as annotations, and this pins that they survive."""
     d = json.loads((built / "results/croissant.json").read_text())
-    ns = "https://w3id.org/provchem/two-layer#"
+    from claimcheck.namespace import NS as ns
     fields = [f for rs in d["recordSet"] for f in rs["field"]]
     assert len(fields) == 3
     for f in fields:

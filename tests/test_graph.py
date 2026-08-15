@@ -21,13 +21,13 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("rdflib")
-from rdflib import Graph, Literal, URIRef  # noqa: E402
+from rdflib import Graph, Literal  # noqa: E402
 
 from claimcheck.graph import build  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO / "example"
-TL = "https://w3id.org/provchem/two-layer#"
+from claimcheck.namespace import BASE, NS as TL  # noqa: E402
 EVI = "https://w3id.org/EVI#"
 
 
@@ -170,5 +170,5 @@ def test_every_subject_is_a_project_iri(g):
     """No blank nodes and no stray namespaces: a record whose identifiers are
     generated per-run cannot be compared with the next run's."""
     strays = {str(s) for s in g.subjects()
-              if not str(s).startswith("https://w3id.org/provchem/two-layer/")}
+              if not str(s).startswith(BASE)}
     assert not strays, strays

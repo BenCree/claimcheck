@@ -69,5 +69,34 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["claimcheck"]
 
+# LINTING AND TYPE-CHECKING RUN INSIDE `pytest`, not beside it.
+#
+# In the predecessor they were a pre-commit hook, which is opt-in — it does not
+# run for `--no-verify`, for a merge in the web UI, or for anyone who never read
+# the README. `tests/test_style.py` runs both, so `pytest` is the whole gate and
+# there is nothing to remember.
+#
+# The selection is narrow by measurement, carried over from the predecessor
+# where ruff's defaults produced 253 findings against a deliberate house style
+# and `F,B,S112` produced 29, of which five were real defects — two
+# `pytest.raises(Exception)` that pass on a typo, two discarded values, and a
+# late-binding closure over a loop variable.
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["F", "B", "S112"]
+ignore = ["F541"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+files = ["claimcheck"]
+# NOT `strict`: it reports mostly missing parameter annotations on correct code,
+# which is the 253-findings failure one tool over. Zero errors is the bar here
+# because the package is four modules — if that stops being achievable, switch
+# to the predecessor's growth ratchet rather than lowering it.
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

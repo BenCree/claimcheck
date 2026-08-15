@@ -46,13 +46,13 @@
     "source": "cr:source",
     "subField": "cr:subField",
     "transform": "cr:transform",
-    "twolayer": "https://w3id.org/provchem/two-layer#"
+    "cc": "https://w3id.org/claimcheck/ns#"
   },
   "@type": "sc:Dataset",
   "conformsTo": "http://mlcommons.org/croissant/1.1",
   "name": "mace_vs_affinity",
   "description": "MACE interaction energies against manually imported experimental affinity",
-  "https://w3id.org/provchem/two-layer#context": "",
+  "https://w3id.org/claimcheck/ns#context": "",
   "distribution": [
     {
       "@type": "cr:FileObject",
@@ -61,7 +61,7 @@
       "contentUrl": "data/mace_energies.csv",
       "encodingFormat": "text/csv",
       "sha256": "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606",
-      "https://w3id.org/provchem/two-layer#origin": "computed"
+      "https://w3id.org/claimcheck/ns#origin": "computed"
     },
     {
       "@type": "cr:FileObject",
@@ -70,10 +70,10 @@
       "contentUrl": "data/experimental_affinity.csv",
       "encodingFormat": "text/csv",
       "sha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628",
-      "https://w3id.org/provchem/two-layer#origin": "manual",
-      "https://w3id.org/provchem/two-layer#manualSource": "Exported by hand from the project's curated affinity table, 2026-08-15",
-      "https://w3id.org/provchem/two-layer#retrieved": "2026-08-15",
-      "https://w3id.org/provchem/two-layer#pinnedSha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628"
+      "https://w3id.org/claimcheck/ns#origin": "manual",
+      "https://w3id.org/claimcheck/ns#manualSource": "Exported by hand from the project's curated affinity table, 2026-08-15",
+      "https://w3id.org/claimcheck/ns#retrieved": "2026-08-15",
+      "https://w3id.org/claimcheck/ns#pinnedSha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628"
     }
   ],
   "recordSet": [
@@ -81,7 +81,7 @@
       "@type": "cr:RecordSet",
       "@id": "mace_energies_csv_records",
       "name": "mace_energies_csv_records",
-      "https://w3id.org/provchem/two-layer#dataset": "mace",
+      "https://w3id.org/claimcheck/ns#dataset": "mace",
       "field": [
         {
           "@type": "cr:Field",
@@ -97,8 +97,8 @@
               "column": "e_int_kcal"
             }
           },
-          "https://w3id.org/provchem/two-layer#unit": "kcal/mol",
-          "https://w3id.org/provchem/two-layer#unitSystem": "UDUNITS-2"
+          "https://w3id.org/claimcheck/ns#unit": "kcal/mol",
+          "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
         },
         {
           "@type": "cr:Field",
@@ -114,8 +114,8 @@
               "column": "n_lig_atoms"
             }
           },
-          "https://w3id.org/provchem/two-layer#unit": "1",
-          "https://w3id.org/provchem/two-layer#unitSystem": "UDUNITS-2"
+          "https://w3id.org/claimcheck/ns#unit": "1",
+          "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
         }
       ]
     },
@@ -123,7 +123,7 @@
       "@type": "cr:RecordSet",
       "@id": "experimental_affinity_csv_records",
       "name": "experimental_affinity_csv_records",
-      "https://w3id.org/provchem/two-layer#dataset": "affinity",
+      "https://w3id.org/claimcheck/ns#dataset": "affinity",
       "field": [
         {
           "@type": "cr:Field",
@@ -139,13 +139,13 @@
               "column": "experimental_pKD"
             }
           },
-          "https://w3id.org/provchem/two-layer#unit": "1",
-          "https://w3id.org/provchem/two-layer#unitSystem": "UDUNITS-2"
+          "https://w3id.org/claimcheck/ns#unit": "1",
+          "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
         }
       ]
     }
   ],
-  "https://w3id.org/provchem/two-layer#joins": [
+  "https://w3id.org/claimcheck/ns#joins": [
     {
       "key": "complex_name",
       "left": "mace",
@@ -159,7 +159,7 @@
       "coverage": 1.0
     }
   ],
-  "https://w3id.org/provchem/two-layer#claims": [
+  "https://w3id.org/claimcheck/ns#claims": [
     {
       "x": "mace.e_int_kcal",
       "y": "affinity.experimental_pKD",

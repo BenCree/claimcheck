@@ -117,7 +117,7 @@ def join(left: dict, right: dict, key: str) -> tuple[list[tuple[dict, dict]], di
                     "n_left": len(lrows), "n_right": len(rrows),
                     "refused": None}
 
-    for side, ds in ((("left"), left), (("right"), right)):
+    for ds in (left, right):
         if key not in (ds["rows"][0] if ds["rows"] else {}):
             report["refused"] = (
                 f"{ds['id']} has no column {key!r}, so the two cannot be "

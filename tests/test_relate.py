@@ -1,4 +1,4 @@
-"""`provchem.relate` — the three verdicts, each seen to happen.
+"""`claimcheck.relate` — the three verdicts, each seen to happen.
 
 **A checker that has only ever returned one verdict has not been shown capable
 of the others.** Run against the real sweep in `example`, this
@@ -19,8 +19,6 @@ from __future__ import annotations
 
 import math
 import random
-import shutil
-import tomllib
 from pathlib import Path
 
 import pytest

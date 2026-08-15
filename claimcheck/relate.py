@@ -23,13 +23,12 @@ resampling rows would treat 29 configurations as 870 independent observations
 and report an interval roughly a fifth of its true width.
 
 `resampling_unit` names the column to cluster on and **must be stated** when the
-data has repeated structure. `provchem` will not guess it: guessing it is how a
+data has repeated structure. `claimcheck` will not guess it: guessing it is how a
 confidence interval becomes decoration.
 """
 
 from __future__ import annotations
 
-import csv
 import json
 import math
 import random
@@ -213,14 +212,12 @@ def check(root: Path | str) -> dict:
             return base | {"verdict": v, "why": why, "status": _STATUS[v],
                            **extra}
 
-        for did in (xd, yd):
-            if did not in sets:
-                out.append(verdict(UNVERIFIABLE,
-                                   f"no dataset with id {did!r} is declared"))
-                break
-        else:
-            pass
-        if xd not in sets or yd not in sets:
+        unknown = [d for d in (xd, yd) if d not in sets]
+        if unknown:
+            out.append(verdict(
+                UNVERIFIABLE,
+                f"no dataset with id {', '.join(repr(u) for u in unknown)}. "
+                f"Known: {', '.join(sorted(sets))}"))
             continue
 
         # ONE DATASET, or two joined on a stated key. The join is refused

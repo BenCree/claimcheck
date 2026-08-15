@@ -38,13 +38,14 @@ import tomllib
 from pathlib import Path
 
 from rdflib import Graph, Literal, Namespace, URIRef
+
+from claimcheck.namespace import BASE, NS
 from rdflib.namespace import RDF, RDFS, XSD
 
 SC = Namespace("https://schema.org/")
 CR = Namespace("http://mlcommons.org/croissant/")
 EVI = Namespace("https://w3id.org/EVI#")
-TL = Namespace("https://w3id.org/provchem/two-layer#")
-BASE = "https://w3id.org/provchem/two-layer/"
+TL = Namespace(NS)
 
 
 def build(root: Path | str) -> Graph:

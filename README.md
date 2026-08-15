@@ -156,7 +156,7 @@ Four modules. Everything else is Snakemake's.
 ## The test suites
 
 ```bash
-pytest                              # all of it, ~16s
+pytest                              # all of it, including lint and types, ~16s
 ```
 
 | | |
@@ -166,6 +166,8 @@ pytest                              # all of it, ~16s
 | `test_relate.py` | the three verdicts, on data with a known answer |
 | `test_graph.py` | the rdflib layer, as the four questions a reader asks — and that the rows are *not* in the graph |
 | `test_end_to_end.py` | the example through Snakemake in a clean copy, Croissant validated by `mlcroissant` |
+| `test_style.py` | ruff and mypy, run BY pytest — one command is the whole gate |
+| `test_namespace.py` | one definition of the IRI base, and an honest statement that it does not resolve |
 | `test_snakemake_rules.py` | runs **Snakemake's own generated per-rule suite**, and fails if a rule has no generated test |
 
 That last one is the rule applied to testing: `snakemake --generate-unit-tests`

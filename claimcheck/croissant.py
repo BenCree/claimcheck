@@ -26,7 +26,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-NS = "https://w3id.org/provchem/two-layer#"
+from claimcheck.namespace import NS
 
 #: The official Croissant 1.1 context, copied verbatim into
 #: `_croissant_context.py`. NOT hand-rolled — see that file for what happened
@@ -57,7 +57,7 @@ def build(root: Path | str, claims_path: Path | None = None) -> dict:
         # real path.
         return "".join(c if c.isalnum() else "_" for c in name)
 
-    by_ds = {}
+    by_ds: dict[str, list[dict]] = {}
     for v in ctx.get("variables", []):
         by_ds.setdefault(v["dataset"], []).append(v)
 
@@ -99,7 +99,7 @@ def build(root: Path | str, claims_path: Path | None = None) -> dict:
                                 "field": fields})
 
     return {
-        "@context": {**_CROISSANT_CONTEXT, "@language": "en", "twolayer": NS},
+        "@context": {**_CROISSANT_CONTEXT, "@language": "en", "cc": NS},
         "@type": "sc:Dataset",
         "conformsTo": "http://mlcommons.org/croissant/1.1",
         "name": proj["name"],
