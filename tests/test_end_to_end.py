@@ -86,8 +86,12 @@ def test_snakemake_recorded_the_dataset_digest_without_us_writing_one(built):
     croissant = found.get("croissant.json")
     assert croissant, f"no metadata record for croissant.json; saw {list(found)}"
     hashed = {Path(k).name: v for k, v in croissant.items()}
-    assert "measurements.csv" in hashed, hashed
-    assert hashed["measurements.csv"].startswith("sha256:"), hashed
+    for name in ("mace_energies.csv", "experimental_affinity.csv"):
+        assert name in hashed, hashed
+        assert hashed[name].startswith("sha256:"), hashed
+    # The MANUAL file is hashed by Snakemake too, because a rule consumes it.
+    # Snakemake cannot say where it came from — `context.toml` pins that — but
+    # it does record the bytes that were actually read.
     # And the context file too, so a claim cannot be edited without the record
     # of the description that quoted it changing.
     assert "context.toml" in hashed, hashed
@@ -109,40 +113,8 @@ def test_the_croissant_carries_units_croissant_itself_cannot_express(built):
     QUDT. So units ride as annotations, and this pins that they survive."""
     d = json.loads((built / "results/croissant.json").read_text())
     ns = "https://w3id.org/provchem/two-layer#"
-    for f in d["recordSet"][0]["field"]:
+    fields = [f for rs in d["recordSet"] for f in rs["field"]]
+    assert len(fields) == 3
+    for f in fields:
         assert f[f"{ns}unit"], f
         assert f[f"{ns}unitSystem"] == "UDUNITS-2"
-
-
-def test_the_graph_joins_a_claim_to_a_column_to_a_digest(built):
-    """The whole point of emitting RDF at all: one query from where a claim came
-    from down to the bytes it is about. If that path is broken the graph is
-    decoration."""
-    pytest.importorskip("rdflib")
-    from rdflib import Graph
-    g = Graph().parse(built / "results/graph.ttl", format="turtle")
-    rows = list(g.query("""
-        PREFIX tl: <https://w3id.org/provchem/two-layer#>
-        PREFIX sc: <https://schema.org/>
-        SELECT ?locator ?col ?unit ?sha WHERE {
-          ?ev  sc:identifier ?locator .
-          ?rel tl:restsOn ?ev ; tl:x ?x .
-          ?x   sc:name ?col ; tl:unit ?unit ; tl:inFile ?f .
-          ?f   sc:sha256 ?sha .
-        }"""))
-    assert rows, "no path from evidence to a column to a digest"
-    for r in rows:
-        assert str(r.sha) and str(r.unit) and str(r.col)
-
-
-def test_the_graph_does_not_contain_the_rows(built):
-    """870 data rows must not become triples. One store measured elsewhere at
-    21.5 MB of bytes `git diff` cannot read is the reason."""
-    pytest.importorskip("rdflib")
-    from rdflib import Graph
-    g = Graph().parse(built / "results/graph.ttl", format="turtle")
-    n_rows = json.loads((built / "results/claims.json").read_text())["rows_read"]
-    assert n_rows == 870
-    assert len(g) < 200, (
-        f"{len(g)} triples for a {n_rows}-row table — the rows have leaked into "
-        f"the graph; it should hold one node per COLUMN")

@@ -5,11 +5,15 @@
 #   snakemake -n      # always first
 #   snakemake -c1
 #
-# The metadata rules take the data as an INPUT even though they read its path
-# from `context.toml`. That is deliberate: consuming it is what puts the
-# dataset's sha256 into Snakemake's own store, because Snakemake records a
-# digest for every input and none for its outputs. It is the whole receipt
-# mechanism, delegated.
+# EVERY DATASET IS AN INPUT to the rules that describe it, even though they read
+# the paths from `context.toml`. Consuming a file is what puts its sha256 into
+# Snakemake's own store — Snakemake records a digest for every input and none
+# for its outputs — so this is the whole receipt mechanism, delegated.
+#
+# The manually imported file is listed too. Snakemake cannot say where it came
+# from, but once a rule consumes it, Snakemake does record the bytes that were
+# read; `context.toml` pins the digest it is SUPPOSED to have, and
+# `claimcheck.datasets` refuses to run if the two disagree.
 
 import sys
 
@@ -24,7 +28,8 @@ rule all:
 
 rule check_claims:
     input:
-        data="data/measurements.csv",
+        data="data/mace_energies.csv",
+        manual="data/experimental_affinity.csv",
         context="context.toml",
     output:
         "results/claims.json",
@@ -36,7 +41,8 @@ rule check_claims:
 
 rule croissant:
     input:
-        data="data/measurements.csv",
+        data="data/mace_energies.csv",
+        manual="data/experimental_affinity.csv",
         claims="results/claims.json",
         context="context.toml",
     output:

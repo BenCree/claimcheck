@@ -37,6 +37,9 @@ import sys
 import tomllib
 from pathlib import Path
 
+from claimcheck.datasets import DatasetError, join
+from claimcheck.datasets import load as load_dataset
+
 #: Three outcomes. `unverifiable` means the check could not reach a verdict,
 #: which is a different fact from the claim being wrong. Folding them together
 #: is how a column of "could not run" becomes a clean bill of health.
@@ -116,12 +119,21 @@ def bootstrap_ci(pairs: list[tuple[float, float]], clusters: list[str] | None,
             len(groups))
 
 
-def _rows(root: Path, ctx: dict) -> list[dict]:
-    rows: list[dict] = []
-    for rel in ctx["dataset"]["files"]:
-        with (root / rel).open(newline="", encoding="utf-8-sig") as fh:
-            rows.extend(csv.DictReader(fh))
-    return rows
+def _ref(text: str, only: str | None) -> tuple[str, str]:
+    """`"affinity.pKD"` -> `("affinity", "pKD")`.
+
+    A bare name is allowed only when the project has ONE dataset. With two, a
+    bare column name is ambiguous and the ambiguity would be resolved by
+    whichever happened to be first — so it is refused instead.
+    """
+    if "." in text:
+        did, _, col = text.partition(".")
+        return did, col
+    if only is None:
+        raise DatasetError(
+            f"{text!r} does not say which dataset it is in. With more than one "
+            f"dataset a bare column name is ambiguous; write `dataset.column`.")
+    return only, text
 
 
 def _paired(rows: list[dict], x: str, y: str, unit: str | None):
@@ -154,19 +166,41 @@ def check(root: Path | str) -> dict:
     # which tells the caller nothing about what they did wrong.
     root = Path(root)
     ctx = tomllib.loads((root / "context.toml").read_text())
-    declared = {v["name"]: v for v in ctx.get("variables", [])}
-    rows = _rows(root, ctx)
-    default_unit = ctx["dataset"].get("resampling_unit")
 
-    out = []
+    # Every dataset is loaded and verified BEFORE any claim is checked. A
+    # manually imported file whose digest has moved stops the run here, rather
+    # than producing verdicts about bytes nobody meant to ship.
+    sets = {d["id"]: load_dataset(root, d) for d in ctx["datasets"]}
+    only = next(iter(sets)) if len(sets) == 1 else None
+    # A LEGIBLE REFUSAL, not a KeyError. A variable with no `dataset` used to
+    # raise `KeyError: 'dataset'` from inside a comprehension, which tells the
+    # person editing a TOML file nothing about which block is wrong.
+    declared = {}
+    for v in ctx.get("variables", []):
+        if "dataset" not in v:
+            raise DatasetError(
+                f"variable {v.get('name', '?')!r} does not say which dataset it "
+                f"belongs to. Add `dataset = \"<id>\"` to its block; with more "
+                f"than one dataset the name alone is ambiguous.")
+        if v["dataset"] not in sets:
+            raise DatasetError(
+                f"variable {v['name']!r} names dataset {v['dataset']!r}, which "
+                f"is not declared. Known: {', '.join(sorted(sets))}")
+        declared[(v["dataset"], v["name"])] = v
+
+    out, joins = [], []
     for rel in ctx.get("relationships", []):
-        x, y = rel["x"], rel["y"]
-        unit = rel.get("resampling_unit", default_unit)
+        xd, x = _ref(rel["x"], only)
+        yd, y = _ref(rel["y"], only)
+        unit = rel.get("resampling_unit") or sets[xd]["spec"].get("resampling_unit")
         row: dict = {
-            "x": x, "y": y, "kind": rel["kind"], "method": rel["method"],
+            "x": f"{xd}.{x}", "y": f"{yd}.{y}",
+            "x_dataset": xd, "y_dataset": yd,
+            "cross_dataset": xd != yd,
+            "kind": rel["kind"], "method": rel["method"],
             "claimed": rel["claimed"], "evidence": rel.get("evidence", {}),
-            "x_unit": declared.get(x, {}).get("unit"),
-            "y_unit": declared.get(y, {}).get("unit"),
+            "x_unit": declared.get((xd, x), {}).get("unit"),
+            "y_unit": declared.get((yd, y), {}).get("unit"),
             "resampling_unit": unit,
         }
 
@@ -179,13 +213,45 @@ def check(root: Path | str) -> dict:
             return base | {"verdict": v, "why": why, "status": _STATUS[v],
                            **extra}
 
+        for did in (xd, yd):
+            if did not in sets:
+                out.append(verdict(UNVERIFIABLE,
+                                   f"no dataset with id {did!r} is declared"))
+                break
+        else:
+            pass
+        if xd not in sets or yd not in sets:
+            continue
+
+        # ONE DATASET, or two joined on a stated key. The join is refused
+        # outright on duplicate keys and its coverage travels with the verdict —
+        # a correlation over a 40%-covered join is a number about a different
+        # population from the one either file describes.
+        if xd == yd:
+            rows = sets[xd]["rows"]
+        else:
+            key = rel.get("join")
+            if not key:
+                out.append(verdict(
+                    UNVERIFIABLE,
+                    f"{xd} and {yd} are different datasets and no `join` key is "
+                    f"declared, so their rows cannot be lined up"))
+                continue
+            pairs_rows, jr = join(sets[xd], sets[yd], key)
+            joins.append(jr)
+            row["join"] = jr
+            if jr["refused"]:
+                out.append(verdict(UNVERIFIABLE, jr["refused"]))
+                continue
+            rows = [{**r_, **l_} for l_, r_ in pairs_rows]
+
         absent = [c for c in (x, y) if not rows or c not in rows[0]]
         if absent:
             out.append(verdict(UNVERIFIABLE,
                                f"the data has no column {', '.join(absent)}"))
             continue
-        undeclared = [c for c in (x, y)
-                      if declared.get(c, {}).get("unit") is None]
+        undeclared = [c for (d_, c) in ((xd, x), (yd, y))
+                      if declared.get((d_, c), {}).get("unit") is None]
         if undeclared:
             out.append(verdict(
                 UNVERIFIABLE,
@@ -245,7 +311,12 @@ def check(root: Path | str) -> dict:
     verdicts: dict[str, int] = {}
     for res in out:
         verdicts[res["verdict"]] = verdicts.get(res["verdict"], 0) + 1
-    return {"dataset": ctx["dataset"]["name"], "rows_read": len(rows),
+    return {"project": ctx["project"]["name"],
+            "datasets": {d: {"origin": s_["origin"], "rows": len(s_["rows"]),
+                             "digests": s_["digests"]}
+                         for d, s_ in sets.items()},
+            "joins": joins,
+            "rows_read": sum(len(s_["rows"]) for s_ in sets.values()),
             "relationships": out, "verdicts": verdicts,
             "any_refuted": any(res["verdict"] == REFUTED for res in out),
             # UNVERIFIABLE IS NOT A PASS, so it is reported at the top level

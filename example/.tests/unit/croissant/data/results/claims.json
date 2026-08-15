@@ -1,0 +1,112 @@
+{
+  "project": "mace_vs_affinity",
+  "datasets": {
+    "mace": {
+      "origin": "computed",
+      "rows": 637,
+      "digests": {
+        "data/mace_energies.csv": "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606"
+      }
+    },
+    "affinity": {
+      "origin": "manual",
+      "rows": 637,
+      "digests": {
+        "data/experimental_affinity.csv": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628"
+      }
+    }
+  },
+  "joins": [
+    {
+      "key": "complex_name",
+      "left": "mace",
+      "right": "affinity",
+      "n_left": 637,
+      "n_right": 637,
+      "refused": null,
+      "n_matched": 637,
+      "n_left_unmatched": 0,
+      "n_right_unmatched": 0,
+      "coverage": 1.0
+    }
+  ],
+  "rows_read": 1274,
+  "relationships": [
+    {
+      "x": "mace.e_int_kcal",
+      "y": "affinity.experimental_pKD",
+      "x_dataset": "mace",
+      "y_dataset": "affinity",
+      "cross_dataset": true,
+      "kind": "correlation",
+      "method": "pearson",
+      "claimed": -0.5,
+      "evidence": {
+        "source": "the premise of MACE triage: interaction energy ranks affinity well enough to spend the free-energy budget on the top slice",
+        "locator": "example/context.toml#relationship-1",
+        "extracted_by": "human"
+      },
+      "x_unit": "kcal/mol",
+      "y_unit": "1",
+      "resampling_unit": "compound_group",
+      "join": {
+        "key": "complex_name",
+        "left": "mace",
+        "right": "affinity",
+        "n_left": 637,
+        "n_right": 637,
+        "refused": null,
+        "n_matched": 637,
+        "n_left_unmatched": 0,
+        "n_right_unmatched": 0,
+        "coverage": 1.0
+      },
+      "n_rows": 637,
+      "dropped": 0,
+      "estimate": -0.450348,
+      "ci_lo": -0.50922,
+      "ci_hi": -0.388048,
+      "ci_level": 0.95,
+      "n_units": 493,
+      "ci_width": 0.121172,
+      "verdict": "agrees",
+      "why": "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)",
+      "status": "measured"
+    },
+    {
+      "x": "mace.e_int_kcal",
+      "y": "mace.n_lig_atoms",
+      "x_dataset": "mace",
+      "y_dataset": "mace",
+      "cross_dataset": false,
+      "kind": "correlation",
+      "method": "pearson",
+      "claimed": 0.0,
+      "evidence": {
+        "source": "the assumption the triage rests on: the energy measures interaction, not size",
+        "locator": "example/context.toml#relationship-2",
+        "extracted_by": "human"
+      },
+      "x_unit": "kcal/mol",
+      "y_unit": "1",
+      "resampling_unit": "compound_group",
+      "n_rows": 637,
+      "dropped": 0,
+      "estimate": -0.589335,
+      "ci_lo": -0.650623,
+      "ci_hi": -0.525401,
+      "ci_level": 0.95,
+      "n_units": 493,
+      "ci_width": 0.125222,
+      "verdict": "refuted",
+      "why": "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)",
+      "status": "falsified"
+    }
+  ],
+  "verdicts": {
+    "agrees": 1,
+    "refuted": 1
+  },
+  "any_refuted": true,
+  "any_unverifiable": false
+}

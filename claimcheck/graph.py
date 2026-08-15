@@ -54,57 +54,76 @@ def build(root: Path | str) -> Graph:
     croissant = json.loads((root / "results/croissant.json").read_text())
 
     g = Graph()
-    for p, n in (("sc", SC), ("cr", CR), ("evi", EVI), ("tl", TL)):
-        g.bind(p, n)
+    for pfx, n in (("sc", SC), ("cr", CR), ("evi", EVI), ("tl", TL)):
+        g.bind(pfx, n)
 
-    ds = URIRef(f"{BASE}dataset/{ctx['dataset']['name']}")
-    g.add((ds, RDF.type, SC.Dataset))
-    g.add((ds, SC.name, Literal(ctx["dataset"]["name"])))
-    g.add((ds, TL.context, Literal(ctx["dataset"].get("context", "").strip())))
+    proj = URIRef(f"{BASE}project/{ctx['project']['name']}")
+    g.add((proj, RDF.type, SC.Dataset))
+    g.add((proj, SC.name, Literal(ctx["project"]["name"])))
 
-    # --- the data side: file, digest, one node per column ---------------------
+    # --- one node per FILE, carrying its digest and its ORIGIN --------------
+    files = {}
     for dist in croissant["distribution"]:
         f = URIRef(f"{BASE}file/{dist['name']}")
+        files[dist["name"]] = f
         g.add((f, RDF.type, CR.FileObject))
         g.add((f, SC.name, Literal(dist["name"])))
-        # THE JOIN TO THE BYTES. Snakemake recorded this same digest as an input
-        # checksum when the metadata rule consumed the file; the two agreeing is
-        # what makes the graph describe *this* copy rather than a file by name.
         g.add((f, SC.sha256, Literal(dist["sha256"])))
-        g.add((ds, SC.distribution, f))
+        # WHETHER A PERSON PUT IT THERE is a fact about how much the number is
+        # worth, so it belongs in the graph and not only in a comment.
+        origin = dist.get(f"{TL}origin")
+        if origin:
+            g.add((f, TL.origin, Literal(origin)))
+        if dist.get(f"{TL}manualSource"):
+            g.add((f, TL.manualSource, Literal(dist[f"{TL}manualSource"])))
+            g.add((f, TL.retrieved, Literal(dist[f"{TL}retrieved"])))
+        g.add((proj, SC.distribution, f))
 
+    # --- one node per COLUMN. The rows stay in the CSV ----------------------
     fields = {}
-    for fld in croissant["recordSet"][0]["field"]:
-        col = fld["name"]
-        u = URIRef(f"{BASE}records/{col}")
-        fields[col] = u
-        g.add((u, RDF.type, CR.Field))
-        g.add((u, SC.name, Literal(col)))
-        g.add((u, RDFS.comment, Literal(fld.get("description", ""))))
-        unit = fld.get(f"{TL}unit")
-        if unit is not None:
-            # Absent stays absent. A `tl:unit ""` triple says somebody declared
-            # it dimensionless; no triple says nobody has said. Emitting an
-            # empty literal for both would collapse the distinction.
-            g.add((u, TL.unit, Literal(unit)))
-            g.add((u, TL.unitSystem, Literal("UDUNITS-2")))
-        for dist in croissant["distribution"]:
-            g.add((u, TL.inFile, URIRef(f"{BASE}file/{dist['name']}")))
+    for rs in croissant["recordSet"]:
+        did = rs.get(f"{TL}dataset", "")
+        for fld in rs["field"]:
+            col = fld["name"]
+            u = URIRef(f"{BASE}records/{did}.{col}")
+            fields[f"{did}.{col}"] = u
+            g.add((u, RDF.type, CR.Field))
+            g.add((u, SC.name, Literal(col)))
+            g.add((u, TL.inDataset, Literal(did)))
+            g.add((u, RDFS.comment, Literal(fld.get("description", ""))))
+            unit = fld.get(f"{TL}unit")
+            if unit is not None:
+                g.add((u, TL.unit, Literal(unit)))
+                g.add((u, TL.unitSystem, Literal("UDUNITS-2")))
+            src = fld.get("source", {}).get("fileObject", {}).get("@id")
+            for name, node in files.items():
+                if name == src:
+                    g.add((u, TL.inFile, node))
 
-    # --- the ontology side: evidence, claim, relationship, verdict ------------
+    # --- claims, evidence, verdicts ----------------------------------------
     for i, r in enumerate(claims["relationships"], 1):
         rel = URIRef(f"{BASE}relationship/{i}")
         g.add((rel, RDF.type, TL.Relationship))
-        g.add((rel, TL.x, fields[r["x"]]))
-        g.add((rel, TL.y, fields[r["y"]]))
+        for role, ref in (("x", r["x"]), ("y", r["y"])):
+            if ref in fields:
+                g.add((rel, TL[role], fields[ref]))
         g.add((rel, TL.method, Literal(r["method"])))
         g.add((rel, TL.claimed, Literal(r["claimed"], datatype=XSD.double)))
         if r.get("estimate") is not None:
-            g.add((rel, TL.estimate,
-                   Literal(r["estimate"], datatype=XSD.double)))
+            g.add((rel, TL.estimate, Literal(r["estimate"], datatype=XSD.double)))
         g.add((rel, TL.verdict, Literal(r["verdict"])))
         g.add((rel, TL.status, Literal(r["status"])))
         g.add((rel, RDFS.comment, Literal(r["why"])))
+        # A CROSS-DATASET CLAIM CARRIES ITS JOIN. Without the coverage, a
+        # reader cannot tell whether the number describes the population either
+        # file describes or some overlap of the two.
+        j = r.get("join")
+        if j and not j.get("refused"):
+            g.add((rel, TL.joinKey, Literal(j["key"])))
+            g.add((rel, TL.joinCoverage,
+                   Literal(j["coverage"], datatype=XSD.double)))
+            g.add((rel, TL.joinMatched,
+                   Literal(j["n_matched"], datatype=XSD.integer)))
 
         ev = r.get("evidence", {})
         if ev.get("locator"):
@@ -114,24 +133,13 @@ def build(root: Path | str) -> Graph:
             g.add((e, RDFS.label, Literal(ev.get("source", ""))))
             g.add((e, TL.extractedBy, Literal(ev.get("extracted_by", "unknown"))))
             g.add((rel, TL.restsOn, e))
-            # EVI'S OWN VERB, not a private one. The claim is what the evidence
-            # supports; `evi:supports` is transitive and `directlySupports` has
-            # `generated`/`usedBy`/`derivedTo`/`created` beneath it, so a
-            # reasoner walks this without being told how.
             g.add((e, EVI.directlySupports, rel))
 
-        # A FALSIFIED RELATIONSHIP CHALLENGES ITS OWN EVIDENCE, and says with
-        # what. This is the edge a reasoner propagates: `indirectlyChallenges`
-        # is the chain ( directlyChallenges o supports ), so anything the
-        # evidence supports downstream inherits the challenge with no traversal
-        # written here.
-        if r["verdict"] == "disagrees":
+        if r["verdict"] == "refuted":
             v = URIRef(f"{BASE}verdict/{i}")
             g.add((v, RDF.type, EVI.Method))
-            g.add((v, RDFS.label,
-                   Literal(f"recomputed {r['method']} r from the data")))
+            g.add((v, RDFS.label, Literal(f"recomputed {r['method']} from the data")))
             g.add((v, EVI.directlyChallenges, rel))
-            g.add((v, TL.evidenceFor, Literal(r["why"])))
 
     return g
 

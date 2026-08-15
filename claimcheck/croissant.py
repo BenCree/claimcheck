@@ -45,90 +45,81 @@ def sha256(p: Path) -> str:
 def build(root: Path | str, claims_path: Path | None = None) -> dict:
     root = Path(root)          # same reason as `relate.check`
     ctx = tomllib.loads((root / "context.toml").read_text())
-    ds = ctx["dataset"]
+    proj = ctx["project"]
     claims_file = claims_path or (root / "results/claims.json")
     claims = (json.loads(claims_file.read_text())
               if claims_file.is_file() else {"relationships": []})
 
-    # THE `@id` IS A SLUG, NOT A FILENAME. `measurements.csv` as an `@id` makes
-    # `mlcroissant` report "there is a reference to node with UUID
-    # 'measurements.csv' ... but this node doesn't exist" — the dot breaks
-    # reference resolution. `emit/croissant.py` already slugs for this reason;
-    # `contentUrl` carries the real path.
     def slug(name: str) -> str:
+        # `@id`s ARE SLUGGED. A dot in a node id makes `mlcroissant` report
+        # "reference to node with UUID 'x.csv' ... but this node doesn't
+        # exist" — the dot breaks reference resolution. `contentUrl` keeps the
+        # real path.
         return "".join(c if c.isalnum() else "_" for c in name)
 
-    first = slug(Path(ds["files"][0]).name)
-    fields = []
+    by_ds = {}
     for v in ctx.get("variables", []):
-        f = {"@type": "cr:Field", "@id": f"{first}_records/{v['name']}",
-             "name": v["name"], "description": v.get("description", ""),
-             # REQUIRED, and only discoverable once the official `@context` is
-             # in place. With a hand-rolled minimal context `mlcroissant` could
-             # not resolve `field` at all and reported the file clean; with the
-             # real one it checks the Field and refuses this if it is absent.
-             # A validator that cannot resolve your terms is not validating.
-             "source": {"fileObject": {"@id": first},
-                        "extract": {"column": v["name"]}},
-             # The spec's atomic table lists exactly sc:Boolean, sc:Date,
-             # sc:Float, sc:Integer, sc:Text. sc:Text is the conservative legal
-             # choice for a column whose type nobody has declared.
-             "dataType": "sc:Text"}
-        if v.get("unit") is not None:
-            # Absent stays absent: an omitted key means nobody has said, and
-            # `unit = ""` means somebody declared it dimensionless. Emitting a
-            # null for both would collapse the distinction the file exists for.
-            f[f"{NS}unit"] = v["unit"]
-            f[f"{NS}unitSystem"] = "UDUNITS-2"
-        fields.append(f)
+        by_ds.setdefault(v["dataset"], []).append(v)
 
-    dist = []
-    for rel in ds["files"]:
-        p = root / rel
-        # `sc:FileObject`, NOT `cr:FileObject`. With `cr` bound to the Croissant
-        # namespace the prefixed form resolves to
-        # `http://mlcommons.org/croissant/FileObject` and `mlcroissant`
-        # rejects it: the class lives in schema.org. Found by validating the
-        # real output — the error does not appear until a validator sees it.
-        # `cr:FileObject` is correct WITH the official `@context`. It was
-        # briefly changed to `sc:FileObject` while a hand-rolled minimal
-        # context was in use, which resolved the prefix wrongly — the fix for
-        # the symptom, not the cause.
-        dist.append({"@type": "cr:FileObject", "@id": slug(Path(rel).name),
-                     "name": slug(Path(rel).name), "contentUrl": rel,
-                     "encodingFormat": "text/csv", "sha256": sha256(p)})
+    dist, record_sets = [], []
+    for d in ctx["datasets"]:
+        first = slug(Path(d["files"][0]).name)
+        for rel in d["files"]:
+            p_ = root / rel
+            fo = {"@type": "cr:FileObject", "@id": slug(Path(rel).name),
+                  "name": slug(Path(rel).name), "contentUrl": rel,
+                  "encodingFormat": "text/csv", "sha256": sha256(p_)}
+            # THE ORIGIN TRAVELS WITH THE FILE. A consumer who cannot tell a
+            # computed file from one somebody dropped in by hand has been given
+            # the same confidence in both, and they do not deserve the same.
+            fo[f"{NS}origin"] = d["origin"]
+            if d["origin"] == "manual":
+                fo[f"{NS}manualSource"] = d.get("source")
+                fo[f"{NS}retrieved"] = d.get("retrieved")
+                fo[f"{NS}pinnedSha256"] = d.get("sha256")
+            dist.append(fo)
+
+        fields = []
+        for v in by_ds.get(d["id"], []):
+            f = {"@type": "cr:Field",
+                 "@id": f"{first}_records/{v['name']}", "name": v["name"],
+                 "description": v.get("description", ""),
+                 "dataType": "sc:Text",
+                 "source": {"fileObject": {"@id": first},
+                            "extract": {"column": v["name"]}}}
+            if v.get("unit") is not None:
+                f[f"{NS}unit"] = v["unit"]
+                f[f"{NS}unitSystem"] = "UDUNITS-2"
+            fields.append(f)
+        if fields:
+            record_sets.append({"@type": "cr:RecordSet",
+                                "@id": f"{first}_records",
+                                "name": f"{first}_records",
+                                f"{NS}dataset": d["id"],
+                                "field": fields})
 
     return {
-        # `@language` IS NOT DECORATION. Without it `mlcroissant validate`
-        # dies with `KeyError: '@language'` in `json_ld.py:187`, which reads as
-        # "your file is broken" and is really "the validator indexes a key it
-        # did not check for". Our conformance ledger has carried a `crashed`
-        # verdict from this same bug; one declared key avoids it, and a crash
-        # is never a pass.
         "@context": {**_CROISSANT_CONTEXT, "@language": "en", "twolayer": NS},
         "@type": "sc:Dataset",
         "conformsTo": "http://mlcommons.org/croissant/1.1",
-        "name": ds["name"],
-        "description": ds.get("title", ds["name"]),
-        f"{NS}context": ds.get("context", "").strip(),
-        # The four `mlcroissant` reports as RECOMMENDED-but-absent. Emitted only
-        # when declared: inventing a licence or a date to silence a warning is
-        # the defect `emit/dcat.py` refuses against PSDI's shapes — "a value
-        # invented to satisfy a validator is the defect, not the fix".
-        **{k: v for k, v in (("license", ds.get("license")),
-                             ("version", ds.get("version")),
-                             ("datePublished", ds.get("date_published")),
-                             ("citation", ds.get("citation"))) if v},
-        f"{NS}resamplingUnit": ds.get("resampling_unit"),
+        "name": proj["name"],
+        "description": proj.get("title", proj["name"]),
+        f"{NS}context": proj.get("context", "").strip(),
+        **{k: v for k, v in (("license", proj.get("license")),
+                             ("version", proj.get("version")),
+                             ("datePublished", proj.get("date_published")),
+                             ("citation", proj.get("citation"))) if v},
         "distribution": dist,
-        "recordSet": [{"@type": "cr:RecordSet", "@id": f"{first}_records",
-                       "name": f"{first}_records", "field": fields}],
+        "recordSet": record_sets,
+        # The join report rides alongside: a correlation over a partial join is
+        # a number about a different population, and the coverage says which.
+        f"{NS}joins": claims.get("joins", []),
         f"{NS}claims": [
             {"x": r["x"], "y": r["y"], "xUnit": r.get("x_unit"),
-             "yUnit": r.get("y_unit"), "method": r["method"],
-             "claimed": r["claimed"], "estimate": r.get("estimate"),
-             "ciLow": r.get("ci_lo"), "ciHigh": r.get("ci_hi"),
-             "nUnits": r.get("n_units"),
+             "yUnit": r.get("y_unit"), "crossDataset": r.get("cross_dataset"),
+             "method": r["method"], "claimed": r["claimed"],
+             "estimate": r.get("estimate"), "ciLow": r.get("ci_lo"),
+             "ciHigh": r.get("ci_hi"), "nUnits": r.get("n_units"),
              "verdict": r["verdict"], "status": r["status"], "why": r["why"],
              "evidenceSource": r.get("evidence", {}).get("source"),
              "evidenceLocator": r.get("evidence", {}).get("locator"),
@@ -148,7 +139,8 @@ def main(argv: list[str] | None = None) -> int:
     claims = d[f"{NS}claims"]
     refuted = sum(1 for c in claims if c["verdict"] == "refuted")
     unver = sum(1 for c in claims if c["verdict"] == "unverifiable")
-    print(f"  {out}  —  {len(d['recordSet'][0]['field'])} field(s), "
+    n_fields = sum(len(rs["field"]) for rs in d["recordSet"])
+    print(f"  {out}  —  {len(d['recordSet'])} record set(s), {n_fields} field(s), "
           f"{len(claims)} claim(s), {refuted} refuted, {unver} unverifiable")
     return 0
 

@@ -86,15 +86,85 @@ The stdlib claim is checked by **running** the core with a meta-path hook that
 refuses every non-stdlib import, not by reading the import lines — a lazy
 import inside a function would pass a reading test and fail on a cluster node.
 
+## Adding a dataset, and relating it to another
+
+Everything is `context.toml`. Nothing else in the project changes.
+
+```toml
+[[datasets]]
+id = "affinity"
+origin = "manual"                    # or "computed". There is NO default
+files = ["data/experimental_affinity.csv"]
+source = "exported by hand from ..."  # required when manual
+retrieved = "2026-08-15"              # required when manual
+sha256 = "b1dc99b6..."                # required when manual, checked every run
+
+[[relationships]]
+x = "mace.e_int_kcal"
+y = "affinity.experimental_pKD"
+join = "complex_name"                # required when the two differ
+kind = "correlation"
+method = "pearson"
+claimed = -0.5
+```
+
+### The manual import cannot go wrong quietly
+
+A file no rule produced is one **Snakemake knows nothing about** — not where it
+came from, not when, not whether the copy on disk is the one anybody looked at.
+So a manual dataset must declare `source`, `retrieved` and `sha256`, and the
+digest is verified **before any claim is checked**:
+
+```
+DatasetError: dataset 'affinity': data/experimental_affinity.csv is not the
+  file that was checked in.
+    declared sha256 b1dc99b64502928f...
+    actual   sha256 3f7a01c9be55e112...
+  A manually imported file that changed without anybody saying so is the one
+  thing nothing else here can detect. If the new file is correct, update
+  `sha256` in context.toml and say in the commit what changed.
+```
+
+A hard error, not a warning — a warning about a silently changed input is one
+people read after they have published. `origin` has no default for the same
+reason: the two kinds need different evidence and a default would pick the
+weaker one.
+
+### The join cannot go wrong quietly either
+
+Duplicate keys are **refused, not resolved**. Ten rows against ten sharing a key
+is a hundred pairs and none of them was measured together. Coverage travels with
+the verdict, so a correlation over a 40%-matched join says so.
+
 ## What each module is
 
 | | |
 |---|---|
 | `relate.py` | recompute a claimed relationship and return holds / refuted / cannot tell. Stdlib only |
 | `croissant.py` | emit the dataset description, carrying units and verdicts. Stdlib only |
+| `datasets.py` | load and verify each dataset; refuse a changed manual import or a fan-out join. Stdlib only |
 | `graph.py` | join the column description to the claims and emit Turtle. Needs `rdflib` |
 
-Three modules. Everything else is Snakemake's.
+Four modules. Everything else is Snakemake's.
+
+## The test suites
+
+```bash
+pytest                              # all of it, ~16s
+```
+
+| | |
+|---|---|
+| `test_dependencies.py` | every dependency needed, every import declared, the core stdlib-only, no run receipts |
+| `test_datasets.py` | the manual import and the join, **each guard watched failing** |
+| `test_relate.py` | the three verdicts, on data with a known answer |
+| `test_graph.py` | the rdflib layer, as the four questions a reader asks — and that the rows are *not* in the graph |
+| `test_end_to_end.py` | the example through Snakemake in a clean copy, Croissant validated by `mlcroissant` |
+| `test_snakemake_rules.py` | runs **Snakemake's own generated per-rule suite**, and fails if a rule has no generated test |
+
+That last one is the rule applied to testing: `snakemake --generate-unit-tests`
+writes one isolated test per rule with its own input fixtures. We did not write
+them and do not maintain them. We run them, and we notice when they go stale.
 
 ## Two things worth knowing
 

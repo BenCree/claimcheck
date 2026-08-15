@@ -1,0 +1,202 @@
+{
+  "@context": {
+    "@language": "en",
+    "@vocab": "https://schema.org/",
+    "citeAs": "cr:citeAs",
+    "column": "cr:column",
+    "conformsTo": "dct:conformsTo",
+    "containedIn": "cr:containedIn",
+    "cr": "http://mlcommons.org/croissant/",
+    "rai": "http://mlcommons.org/croissant/RAI/",
+    "data": {
+      "@id": "cr:data",
+      "@type": "@json"
+    },
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "dct": "http://purl.org/dc/terms/",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
+    "extract": "cr:extract",
+    "field": "cr:field",
+    "fileProperty": "cr:fileProperty",
+    "fileObject": "cr:fileObject",
+    "fileSet": "cr:fileSet",
+    "format": "cr:format",
+    "includes": "cr:includes",
+    "isLiveDataset": "cr:isLiveDataset",
+    "jsonPath": "cr:jsonPath",
+    "key": "cr:key",
+    "md5": "cr:md5",
+    "parentField": "cr:parentField",
+    "path": "cr:path",
+    "prov": "http://www.w3.org/ns/prov#",
+    "recordSet": "cr:recordSet",
+    "references": "cr:references",
+    "regex": "cr:regex",
+    "repeated": "cr:repeated",
+    "replace": "cr:replace",
+    "sc": "https://schema.org/",
+    "samplingRate": "cr:samplingRate",
+    "separator": "cr:separator",
+    "source": "cr:source",
+    "subField": "cr:subField",
+    "transform": "cr:transform",
+    "twolayer": "https://w3id.org/provchem/two-layer#"
+  },
+  "@type": "sc:Dataset",
+  "conformsTo": "http://mlcommons.org/croissant/1.1",
+  "name": "mace_vs_affinity",
+  "description": "MACE interaction energies against manually imported experimental affinity",
+  "https://w3id.org/provchem/two-layer#context": "",
+  "distribution": [
+    {
+      "@type": "cr:FileObject",
+      "@id": "mace_energies_csv",
+      "name": "mace_energies_csv",
+      "contentUrl": "data/mace_energies.csv",
+      "encodingFormat": "text/csv",
+      "sha256": "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606",
+      "https://w3id.org/provchem/two-layer#origin": "computed"
+    },
+    {
+      "@type": "cr:FileObject",
+      "@id": "experimental_affinity_csv",
+      "name": "experimental_affinity_csv",
+      "contentUrl": "data/experimental_affinity.csv",
+      "encodingFormat": "text/csv",
+      "sha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628",
+      "https://w3id.org/provchem/two-layer#origin": "manual",
+      "https://w3id.org/provchem/two-layer#manualSource": "Exported by hand from the project's curated affinity table, 2026-08-15",
+      "https://w3id.org/provchem/two-layer#retrieved": "2026-08-15",
+      "https://w3id.org/provchem/two-layer#pinnedSha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628"
+    }
+  ],
+  "recordSet": [
+    {
+      "@type": "cr:RecordSet",
+      "@id": "mace_energies_csv_records",
+      "name": "mace_energies_csv_records",
+      "https://w3id.org/provchem/two-layer#dataset": "mace",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "mace_energies_csv_records/e_int_kcal",
+          "name": "e_int_kcal",
+          "description": "MACE-OFF interaction energy. Converted from eV by the prepare rule.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "mace_energies_csv"
+            },
+            "extract": {
+              "column": "e_int_kcal"
+            }
+          },
+          "https://w3id.org/provchem/two-layer#unit": "kcal/mol",
+          "https://w3id.org/provchem/two-layer#unitSystem": "UDUNITS-2"
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "mace_energies_csv_records/n_lig_atoms",
+          "name": "n_lig_atoms",
+          "description": "Ligand heavy-atom count \u2014 the obvious size confound.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "mace_energies_csv"
+            },
+            "extract": {
+              "column": "n_lig_atoms"
+            }
+          },
+          "https://w3id.org/provchem/two-layer#unit": "1",
+          "https://w3id.org/provchem/two-layer#unitSystem": "UDUNITS-2"
+        }
+      ]
+    },
+    {
+      "@type": "cr:RecordSet",
+      "@id": "experimental_affinity_csv_records",
+      "name": "experimental_affinity_csv_records",
+      "https://w3id.org/provchem/two-layer#dataset": "affinity",
+      "field": [
+        {
+          "@type": "cr:Field",
+          "@id": "experimental_affinity_csv_records/experimental_pKD",
+          "name": "experimental_pKD",
+          "description": "Measured affinity as pKD. Dimensionless: it is a log ratio.",
+          "dataType": "sc:Text",
+          "source": {
+            "fileObject": {
+              "@id": "experimental_affinity_csv"
+            },
+            "extract": {
+              "column": "experimental_pKD"
+            }
+          },
+          "https://w3id.org/provchem/two-layer#unit": "1",
+          "https://w3id.org/provchem/two-layer#unitSystem": "UDUNITS-2"
+        }
+      ]
+    }
+  ],
+  "https://w3id.org/provchem/two-layer#joins": [
+    {
+      "key": "complex_name",
+      "left": "mace",
+      "right": "affinity",
+      "n_left": 637,
+      "n_right": 637,
+      "refused": null,
+      "n_matched": 637,
+      "n_left_unmatched": 0,
+      "n_right_unmatched": 0,
+      "coverage": 1.0
+    }
+  ],
+  "https://w3id.org/provchem/two-layer#claims": [
+    {
+      "x": "mace.e_int_kcal",
+      "y": "affinity.experimental_pKD",
+      "xUnit": "kcal/mol",
+      "yUnit": "1",
+      "crossDataset": true,
+      "method": "pearson",
+      "claimed": -0.5,
+      "estimate": -0.450348,
+      "ciLow": -0.50922,
+      "ciHigh": -0.388048,
+      "nUnits": 493,
+      "verdict": "agrees",
+      "status": "measured",
+      "why": "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)",
+      "evidenceSource": "the premise of MACE triage: interaction energy ranks affinity well enough to spend the free-energy budget on the top slice",
+      "evidenceLocator": "example/context.toml#relationship-1",
+      "extractedBy": "human"
+    },
+    {
+      "x": "mace.e_int_kcal",
+      "y": "mace.n_lig_atoms",
+      "xUnit": "kcal/mol",
+      "yUnit": "1",
+      "crossDataset": false,
+      "method": "pearson",
+      "claimed": 0.0,
+      "estimate": -0.589335,
+      "ciLow": -0.650623,
+      "ciHigh": -0.525401,
+      "nUnits": 493,
+      "verdict": "refuted",
+      "status": "falsified",
+      "why": "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)",
+      "evidenceSource": "the assumption the triage rests on: the energy measures interaction, not size",
+      "evidenceLocator": "example/context.toml#relationship-2",
+      "extractedBy": "human"
+    }
+  ]
+}

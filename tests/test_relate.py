@@ -38,17 +38,18 @@ def _project(tmp_path: Path, rows: list[dict], relationships: str,
     (tmp_path / "d.csv").write_text("\n".join(lines) + "\n")
     ru = f'resampling_unit = "{resampling_unit}"\n' if resampling_unit else ""
     (tmp_path / "context.toml").write_text(
-        f'[dataset]\nname = "t"\nfiles = ["d.csv"]\n{ru}\n'
+        f'[project]\nname = "t"\n\n'
+        f'[[datasets]]\nid = "d"\norigin = "computed"\nfiles = ["d.csv"]\n{ru}\n'
         f'{variables}\n{relationships}\n')
     return tmp_path
 
 
-_VARS = ('[[variables]]\nname = "x"\nunit = "1"\n\n'
-         '[[variables]]\nname = "y"\nunit = "1"\n')
+_VARS = ('[[variables]]\ndataset = "d"\nname = "x"\nunit = "1"\n\n'
+         '[[variables]]\ndataset = "d"\nname = "y"\nunit = "1"\n')
 
 
 def _rel(claimed: float) -> str:
-    return (f'[[relationships]]\nx = "x"\ny = "y"\nkind = "correlation"\n'
+    return (f'[[relationships]]\nx = "d.x"\ny = "d.y"\nkind = "correlation"\n'
             f'method = "pearson"\nclaimed = {claimed}\n')
 
 
@@ -90,7 +91,7 @@ def test_a_wrong_claim_is_refuted(tmp_path):
 def test_an_undeclared_unit_is_unverifiable_not_a_pass(tmp_path):
     """`unit` absent means nobody has said, and a relationship between
     undeclared quantities is not comparable with anybody else's."""
-    only_x = '[[variables]]\nname = "x"\nunit = "1"\n'
+    only_x = '[[variables]]\ndataset = "d"\nname = "x"\nunit = "1"\n'
     d = check(_project(tmp_path, _correlated(), _rel(0.8), only_x))
     got = d["relationships"][0]
     assert got["verdict"] == UNVERIFIABLE and got["status"] == "untested"
@@ -169,4 +170,4 @@ def test_the_shipped_example_reaches_both_verdicts():
     one verdict, a reader would not learn the other exists."""
     d = check(REPO / "example")
     assert d["verdicts"].get(AGREES) and d["verdicts"].get(REFUTED), d["verdicts"]
-    assert d["rows_read"] == 870
+    assert set(d["datasets"]) == {"mace", "affinity"}
