@@ -1,0 +1,39 @@
+@prefix cc: <https://w3id.org/claimcheck/ns#> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix spdx: <http://spdx.org/rdf/terms#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://w3id.org/claimcheck/dataset/mace_vs_affinity> a dcat:Dataset ;
+    dct:identifier "mace_vs_affinity" ;
+    dct:title "MACE interaction energies against manually imported experimental affinity" ;
+    dcat:distribution <https://w3id.org/claimcheck/distribution/data_experimental_affinity.csv>,
+        <https://w3id.org/claimcheck/distribution/data_mace_energies.csv> ;
+    cc:claimsChecked 2 ;
+    cc:claimsRefuted 1 ;
+    cc:claimsUnverifiable 0 .
+
+<https://w3id.org/claimcheck/checksum/data_experimental_affinity.csv> a spdx:Checksum ;
+    spdx:algorithm spdx:checksumAlgorithm_sha256 ;
+    spdx:checksumValue "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628" .
+
+<https://w3id.org/claimcheck/checksum/data_mace_energies.csv> a spdx:Checksum ;
+    spdx:algorithm spdx:checksumAlgorithm_sha256 ;
+    spdx:checksumValue "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606" .
+
+<https://w3id.org/claimcheck/distribution/data_experimental_affinity.csv> a dcat:Distribution ;
+    dct:provenance "Manually imported. Source: Exported by hand from the project's curated affinity table, 2026-08-15. Retrieved: 2026-08-15." ;
+    dct:title "experimental_affinity.csv" ;
+    spdx:checksum <https://w3id.org/claimcheck/checksum/data_experimental_affinity.csv> ;
+    dcat:byteSize "14609"^^xsd:nonNegativeInteger ;
+    dcat:downloadURL "data/experimental_affinity.csv" ;
+    dcat:mediaType "text/csv" .
+
+<https://w3id.org/claimcheck/distribution/data_mace_energies.csv> a dcat:Distribution ;
+    dct:provenance "Produced by a rule in this project's Snakemake workflow; the inputs, code and environment are in its metadata record." ;
+    dct:title "mace_energies.csv" ;
+    spdx:checksum <https://w3id.org/claimcheck/checksum/data_mace_energies.csv> ;
+    dcat:byteSize "25933"^^xsd:nonNegativeInteger ;
+    dcat:downloadURL "data/mace_energies.csv" ;
+    dcat:mediaType "text/csv" .
+

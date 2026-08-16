@@ -66,6 +66,16 @@ dev = [
   "rdflib>=7.0",
 ]
 
+# A THIRD PARTY CAN ADD AN OUTPUT FORMAT WITHOUT FORKING THIS. Ship a package
+# exposing `claimcheck.emitters`, and the name appears in
+# `python -m claimcheck.emit --list` with no change here.
+[project.entry-points."claimcheck.emitters"]
+# (the three built-ins are found by name, not by entry point — this group is
+# the seam for everyone else)
+
+[project.scripts]
+claimcheck = "claimcheck.emit:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["claimcheck"]
 

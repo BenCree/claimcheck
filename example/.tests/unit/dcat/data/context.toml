@@ -1,0 +1,103 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ADDING A DATASET is one `[[datasets]]` block and one `[[variables]]` block per
+# column you want to talk about. RELATING TWO is one `[[relationships]]` block.
+# Nothing else in the project changes.
+#
+# The two things that could go wrong quietly are handled at load time, before
+# any claim is checked:
+#
+#   a manually imported file that changed  ->  the run stops
+#   a join on a key with duplicates        ->  the relationship is refused
+# ─────────────────────────────────────────────────────────────────────────────
+
+[project]
+name = "mace_vs_affinity"
+title = "MACE interaction energies against manually imported experimental affinity"
+
+# ── DATASET 1: computed here ─────────────────────────────────────────────────
+# A rule in the Snakefile produces it, so Snakemake already holds its digest,
+# the code that made it, the environment and the times. Nothing more is needed
+# and nothing more is declared.
+[[datasets]]
+id = "mace"
+origin = "computed"
+files = ["data/mace_energies.csv"]
+title = "MACE-OFF pocket-ligand interaction energies"
+resampling_unit = "compound_group"
+
+# ── DATASET 2: put here by a person ──────────────────────────────────────────
+# NO RULE MADE THIS, so Snakemake knows nothing about it — not where it came
+# from, not when, not whether the copy on disk is the one anybody looked at.
+# `source`, `retrieved` and `sha256` are therefore REQUIRED, and the digest is
+# checked on every single run.
+#
+# Replace the file with a newer export and the run stops with both digests
+# printed. That is deliberately a hard error and not a warning: a warning about
+# a silently changed input is one people read after they have published.
+#
+# To update it on purpose: put the new file in place, run the workflow, copy the
+# `actual` digest out of the error into the line below, and say in the commit
+# what changed.
+[[datasets]]
+id = "affinity"
+origin = "manual"
+files = ["data/experimental_affinity.csv"]
+title = "Measured binding affinities as pKD"
+source = "Exported by hand from the project's curated affinity table, 2026-08-15"
+retrieved = "2026-08-15"
+sha256 = "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628"
+
+# ── VARIABLES ────────────────────────────────────────────────────────────────
+# Each names its dataset, so `mace.e_int_kcal` is never confused with a column
+# of the same name somewhere else. Units are UDUNITS-2; omit the key entirely if
+# nobody has declared one, and any claim touching it returns `unverifiable`.
+
+[[variables]]
+dataset = "mace"
+name = "e_int_kcal"
+unit = "kcal/mol"
+description = "MACE-OFF interaction energy. Converted from eV by the prepare rule."
+
+[[variables]]
+dataset = "mace"
+name = "n_lig_atoms"
+unit = "1"
+description = "Ligand heavy-atom count — the obvious size confound."
+
+[[variables]]
+dataset = "affinity"
+name = "experimental_pKD"
+unit = "1"
+description = "Measured affinity as pKD. Dimensionless: it is a log ratio."
+
+# ── RELATIONSHIPS ────────────────────────────────────────────────────────────
+
+# ACROSS THE TWO DATASETS, so it needs a join key. The key must identify a row
+# on both sides; duplicates are refused rather than resolved, because joining
+# ten rows to ten rows on a shared key makes a hundred pairs and none of them
+# was ever measured.
+[[relationships]]
+x = "mace.e_int_kcal"
+y = "affinity.experimental_pKD"
+join = "complex_name"
+kind = "correlation"
+method = "pearson"
+claimed = -0.5
+[relationships.evidence]
+source = "the premise of MACE triage: interaction energy ranks affinity well enough to spend the free-energy budget on the top slice"
+locator = "example/context.toml#relationship-1"
+extracted_by = "human"
+
+# WITHIN ONE DATASET, so no join key is needed. This is the control, and it
+# matters more than the claim above: if the energy tracks ligand SIZE more
+# tightly than it tracks affinity, triaging on it selects big molecules.
+[[relationships]]
+x = "mace.e_int_kcal"
+y = "mace.n_lig_atoms"
+kind = "correlation"
+method = "pearson"
+claimed = 0.0
+[relationships.evidence]
+source = "the assumption the triage rests on: the energy measures interaction, not size"
+locator = "example/context.toml#relationship-2"
+extracted_by = "human"

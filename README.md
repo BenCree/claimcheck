@@ -142,6 +142,61 @@ Duplicate keys are **refused, not resolved**. Ten rows against ten sharing a key
 is a hundred pairs and none of them was measured together. Coverage travels with
 the verdict, so a correlation over a 40%-matched join says so.
 
+## Output formats, and what DCAT is for
+
+```bash
+python -m claimcheck.emit --list
+  croissant    MLCommons Croissant 1.1 — how to READ the dataset
+  dcat         W3C DCAT — how to FIND the dataset, for a catalogue
+  graph        the claims and columns as RDF, joined to the digests
+```
+
+**Croissant and DCAT are not rivals; they answer different questions.**
+
+| | Croissant | DCAT |
+|---|---|---|
+| the question | **how do I read this?** | **how do I find this?** |
+| the audience | a loader, a training script | a catalogue, a search index, a repository |
+| the content | record sets, fields, types, extraction | title, publisher, licence, keywords, distributions |
+| who speaks it | ML tooling | data.gov, data.europa.eu, institutional portals, PSDI |
+
+Croissant tells you column 3 is a float you extract from `data.csv`. DCAT gets
+the dataset listed alongside ten thousand others with a licence a lawyer can
+read. Neither does the other's job.
+
+The reason DCAT is worth emitting is that **some of what we hold has a standard
+slot**, and a fact in a standard slot is one a stranger's tooling can use:
+
+* the digest → `spdx:checksum`, which DCAT-AP already defines
+* where a manual dataset came from → `dct:provenance`
+* licence, title, keywords, byte size, media type → the obvious DCAT terms
+
+**Units and claims stay in our namespace, because DCAT has no slot for them.**
+Minting `dcat:refuted` would imply a standard that does not exist. A test pins
+that we do not.
+
+> **Not PSDI-conformant.** PSDI constrains DCAT much further with SHACL shapes —
+> identifiers under their URL namespace, a logo, a display priority. Checking
+> against them needs `pyshacl` and the vendored shapes, and that returns *with*
+> the decision to adopt PSDI rather than before it. What comes out here is plain
+> DCAT.
+
+### Adding a format
+
+An emitter is a function `render(root) -> str`. Built-ins are named in
+`emit._BUILTIN`; **anyone else registers one under the `claimcheck.emitters`
+entry-point group** and it appears in `--list` with no change to this
+repository. The dependency guard derives which modules may import `rdflib` from
+that same registry, so it does not need editing either.
+
+### Adding a statistic
+
+`ESTIMATORS` in `relate.py` maps a method name to `(function, kind)`. Adding
+Spearman was eight lines. **The declared method is the one that runs** — it was
+recorded in every output and never dispatched on, so `method = "spearman"`
+computed Pearson and labelled it Spearman, which is the silent wrong answer this
+package exists to refuse.
+
 ## What each module is
 
 | | |
@@ -150,8 +205,11 @@ the verdict, so a correlation over a 40%-matched join says so.
 | `croissant.py` | emit the dataset description, carrying units and verdicts. Stdlib only |
 | `datasets.py` | load and verify each dataset; refuse a changed manual import or a fan-out join. Stdlib only |
 | `graph.py` | join the column description to the claims and emit Turtle. Needs `rdflib` |
+| `dcat.py` | the catalogue card, with the digest in `spdx:checksum`. Needs `rdflib` |
+| `emit.py` | the format registry, and the CLI |
+| `namespace.py` | one definition of the IRI base, and an honest note that it does not resolve |
 
-Four modules. Everything else is Snakemake's.
+Seven modules, four of them under 200 lines. Everything else is Snakemake's.
 
 ## The test suites
 

@@ -129,6 +129,11 @@ def build(root: Path | str, claims_path: Path | None = None) -> dict:
     }
 
 
+def render(root: Path | str) -> str:
+    """The emitter interface, shared with `graph` and `dcat`."""
+    return json.dumps(build(root), indent=2) + "\n"
+
+
 def main(argv: list[str] | None = None) -> int:
     a = argv if argv is not None else sys.argv[1:]
     root = Path(a[0]) if a else Path.cwd()

@@ -24,6 +24,7 @@ rule all:
     input:
         "results/croissant.json",
         "results/graph.ttl",
+        "results/dcat.ttl",
 
 
 rule check_claims:
@@ -65,3 +66,20 @@ rule graph:
         py=PY,
     shell:
         "{params.py} -m claimcheck.graph . {output}"
+
+
+# ADDING A FORMAT IS A RULE AND A NAME.  looks it up in a
+# registry; a third party can add one under the 
+# entry-point group and it works here with no change to the package.
+rule dcat:
+    input:
+        data="data/mace_energies.csv",
+        manual="data/experimental_affinity.csv",
+        claims="results/claims.json",
+        context="context.toml",
+    output:
+        "results/dcat.ttl",
+    params:
+        py=PY,
+    shell:
+        "{params.py} -m claimcheck.emit dcat . {output}"

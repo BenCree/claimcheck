@@ -163,13 +163,24 @@ print("OK", d["verdicts"])
     assert "OK" in r.stdout
 
 
-def test_only_the_graph_module_reaches_for_a_graph_library():
-    """rdflib is an EXTRA, so anything outside `graph.py` importing it would
-    make the core install broken in a way the test above cannot see — that test
-    imports only the two core modules."""
+def test_only_modules_that_declare_the_extra_reach_for_it():
+    """rdflib is an EXTRA, so a module importing it outside the ones that say
+    they need it makes the core install broken in a way the stdlib probe above
+    cannot see — that probe imports only the core modules.
+
+    DERIVED FROM THE REGISTRY, not a filename. The first version named
+    `graph.py`, and adding `dcat.py` — a second legitimate rdflib user — made it
+    fail for being right. A rule that has to be edited every time the thing it
+    describes grows is a rule that will be edited wrongly.
+    """
+    from claimcheck.emit import _BUILTIN
+    allowed = {mod.rsplit(".", 1)[-1] + ".py"
+               for mod, extra, _ in _BUILTIN.values() if extra == "graph"}
     offenders = {str(p.relative_to(REPO)) for p in PKG.rglob("*.py")
-                 if p.name != "graph.py" and "rdflib" in _imports(p)}
-    assert not offenders, f"rdflib outside graph.py: {offenders}"
+                 if p.name not in allowed and "rdflib" in _imports(p)}
+    assert not offenders, (
+        f"rdflib imported by {offenders}, which do not declare the 'graph' "
+        f"extra in `emit._BUILTIN`. Declare it there, or do not import it.")
 
 
 # ---------------------------------------------------------------------------

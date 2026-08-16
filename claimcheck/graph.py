@@ -145,6 +145,11 @@ def build(root: Path | str) -> Graph:
     return g
 
 
+def render(root: Path | str) -> str:
+    """The emitter interface, shared with `croissant` and `dcat`."""
+    return build(root).serialize(format="turtle")
+
+
 def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
     out = Path(sys.argv[2]) if len(sys.argv) > 2 else root / "results/graph.ttl"

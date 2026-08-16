@@ -83,8 +83,49 @@ def pearson(xs: list[float], ys: list[float]) -> float | None:
     return sxy / math.sqrt(sxx * syy)
 
 
+def spearman(xs: list[float], ys: list[float]) -> float | None:
+    """Pearson on ranks: monotonic association without assuming a straight line.
+
+    Worth having in chemistry specifically. Binding energies against measured
+    affinity are routinely monotonic and curved, and Pearson understates that
+    while Spearman does not — so "which estimator" is a scientific choice and
+    belongs in `context.toml`, not in whichever one the code happens to call.
+    """
+    def rank(v: list[float]) -> list[float]:
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        out = [0.0] * len(v)
+        i = 0
+        while i < len(order):
+            j = i
+            while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
+                j += 1
+            # TIES TAKE THE AVERAGE RANK. Assigning them arbitrary distinct
+            # ranks invents an ordering the data does not have, and on data with
+            # many repeated values that is most of the correlation.
+            avg = (i + j) / 2 + 1
+            for k in range(i, j + 1):
+                out[order[k]] = avg
+            i = j + 1
+        return out
+    return pearson(rank(xs), rank(ys))
+
+
+#: THE EXTENSION POINT FOR STATISTICS. `method` was written into every output
+#: and never dispatched on, so `method = "spearman"` computed Pearson and
+#: labelled it Spearman — a silent wrong answer of exactly the kind this package
+#: exists to refuse, in its own core.
+#:
+#: Adding one is a function and an entry here. Each declares the `kind` it
+#: implements so a mismatched pair is refused rather than quietly ignored.
+ESTIMATORS: dict[str, tuple] = {
+    "pearson": (pearson, "correlation"),
+    "spearman": (spearman, "correlation"),
+}
+
+
 def bootstrap_ci(pairs: list[tuple[float, float]], clusters: list[str] | None,
-                 level: float = 0.95) -> tuple[float, float, int] | None:
+                 level: float = 0.95, estimate=pearson
+                 ) -> tuple[float, float, int] | None:
     """Percentile CI for r, resampling CLUSTERS when they are given.
 
     Returns `(lo, hi, n_effective)` where `n_effective` is the number of
@@ -106,7 +147,7 @@ def bootstrap_ci(pairs: list[tuple[float, float]], clusters: list[str] | None,
         drawn: list[tuple[float, float]] = []
         for _ in range(len(groups)):
             drawn.extend(rng.choice(groups))
-        r = pearson([p[0] for p in drawn], [p[1] for p in drawn])
+        r = estimate([p[0] for p in drawn], [p[1] for p in drawn])
         if r is not None:
             stats.append(r)
     if len(stats) < N_BOOT // 2:
@@ -212,6 +253,21 @@ def check(root: Path | str) -> dict:
             return base | {"verdict": v, "why": why, "status": _STATUS[v],
                            **extra}
 
+        # THE DECLARED METHOD IS THE ONE THAT RUNS, or the run stops.
+        if rel["method"] not in ESTIMATORS:
+            out.append(verdict(
+                UNVERIFIABLE,
+                f"unknown method {rel['method']!r}. Known: "
+                f"{', '.join(sorted(ESTIMATORS))}"))
+            continue
+        estimate, implements = ESTIMATORS[rel["method"]]
+        if rel["kind"] != implements:
+            out.append(verdict(
+                UNVERIFIABLE,
+                f"{rel['method']!r} computes a {implements}, but this claim "
+                f"declares kind {rel['kind']!r}"))
+            continue
+
         unknown = [d for d in (xd, yd) if d not in sets]
         if unknown:
             out.append(verdict(
@@ -265,13 +321,13 @@ def check(root: Path | str) -> dict:
 
         pairs, clusters, dropped = _paired(rows, x, y, unit)
         row |= {"n_rows": len(pairs), "dropped": dropped}
-        r = pearson([p[0] for p in pairs], [p[1] for p in pairs])
+        r = estimate([p[0] for p in pairs], [p[1] for p in pairs])
         if r is None:
             out.append(verdict(UNVERIFIABLE,
                                f"r is undefined on {len(pairs)} usable pair(s)"))
             continue
         row["estimate"] = round(r, 6)
-        ci = bootstrap_ci(pairs, clusters)
+        ci = bootstrap_ci(pairs, clusters, estimate=estimate)
         if ci is None:
             out.append(verdict(
                 UNVERIFIABLE,
