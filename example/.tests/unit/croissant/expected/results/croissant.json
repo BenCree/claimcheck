@@ -58,7 +58,7 @@
       "@type": "cr:FileObject",
       "@id": "mace_energies_csv",
       "name": "mace_energies_csv",
-      "contentUrl": "data/mace_energies.csv",
+      "contentUrl": "../data/mace_energies.csv",
       "encodingFormat": "text/csv",
       "sha256": "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606",
       "https://w3id.org/claimcheck/ns#origin": "computed"
@@ -67,7 +67,7 @@
       "@type": "cr:FileObject",
       "@id": "experimental_affinity_csv",
       "name": "experimental_affinity_csv",
-      "contentUrl": "data/experimental_affinity.csv",
+      "contentUrl": "../data/experimental_affinity.csv",
       "encodingFormat": "text/csv",
       "sha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628",
       "https://w3id.org/claimcheck/ns#origin": "manual",
@@ -88,7 +88,7 @@
           "@id": "mace_energies_csv_records/e_int_kcal",
           "name": "e_int_kcal",
           "description": "MACE-OFF interaction energy. Converted from eV by the prepare rule.",
-          "dataType": "sc:Text",
+          "dataType": "sc:Float",
           "source": {
             "fileObject": {
               "@id": "mace_energies_csv"
@@ -105,7 +105,7 @@
           "@id": "mace_energies_csv_records/n_lig_atoms",
           "name": "n_lig_atoms",
           "description": "Ligand heavy-atom count \u2014 the obvious size confound.",
-          "dataType": "sc:Text",
+          "dataType": "sc:Integer",
           "source": {
             "fileObject": {
               "@id": "mace_energies_csv"
@@ -130,7 +130,7 @@
           "@id": "experimental_affinity_csv_records/experimental_pKD",
           "name": "experimental_pKD",
           "description": "Measured affinity as pKD. Dimensionless: it is a log ratio.",
-          "dataType": "sc:Text",
+          "dataType": "sc:Float",
           "source": {
             "fileObject": {
               "@id": "experimental_affinity_csv"

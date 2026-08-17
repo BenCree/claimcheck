@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from _snakemake import snakemake_cmd, why_not
+
 REPO = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO / "example"
 
@@ -33,12 +35,13 @@ def built(tmp_path_factory):
     failures" over a results directory that is gitignored, so on a fresh clone
     it examined nothing and passed.
     """
-    if shutil.which("snakemake") is None:
-        pytest.skip("snakemake is not installed")
+    sm = snakemake_cmd()
+    if sm is None:
+        pytest.skip(why_not())
     work = tmp_path_factory.mktemp("e2e") / "example"
     shutil.copytree(EXAMPLE, work)
     shutil.rmtree(work / "results", ignore_errors=True)
-    r = _run("snakemake", "-c1", cwd=work)
+    r = _run(*sm, "-c1", cwd=work)
     assert r.returncode == 0, r.stderr[-2000:]
     return work
 
@@ -48,12 +51,13 @@ def test_the_dry_run_lists_every_rule(tmp_path):
     to be done" against results a previous run left behind — so this test
     passed or failed depending on the state of the working tree, which is the
     vacuity shape it is supposed to be guarding against."""
-    if shutil.which("snakemake") is None:
-        pytest.skip("snakemake is not installed")
+    sm = snakemake_cmd()
+    if sm is None:
+        pytest.skip(why_not())
     work = tmp_path / "example"
     shutil.copytree(EXAMPLE, work)
     shutil.rmtree(work / "results", ignore_errors=True)
-    r = _run("snakemake", "-n", cwd=work)
+    r = _run(*sm, "-n", cwd=work)
     assert r.returncode == 0, r.stderr[-1500:]
     for rule in ("check_claims", "croissant", "graph"):
         assert rule in r.stdout, rule

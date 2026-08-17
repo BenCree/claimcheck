@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from _snakemake import snakemake_cmd, why_not
+
 pytest.importorskip("rdflib")
 from rdflib import Graph, Literal  # noqa: E402
 
@@ -35,15 +37,16 @@ EVI = "https://w3id.org/EVI#"
 def g() -> Graph:
     """Built in a COPY that is run from scratch, so the test cannot pass on
     results a previous run left in the working tree."""
-    if shutil.which("snakemake") is None:
-        pytest.skip("snakemake is not installed")
+    sm = snakemake_cmd()
+    if sm is None:
+        pytest.skip(why_not())
     import os
     import tempfile
     tmp = Path(tempfile.mkdtemp()) / "example"
     shutil.copytree(EXAMPLE, tmp)
     shutil.rmtree(tmp / "results", ignore_errors=True)
     shutil.rmtree(tmp / ".snakemake", ignore_errors=True)
-    r = subprocess.run(["snakemake", "-c1"], capture_output=True, text=True,
+    r = subprocess.run([*sm, "-c1"], capture_output=True, text=True,
                        cwd=str(tmp),
                        env={**os.environ, "PYTHONPATH": str(REPO)})
     assert r.returncode == 0, r.stderr[-2000:]

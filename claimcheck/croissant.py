@@ -20,8 +20,10 @@ by subject rather than by dependency.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
+import os
 import sys
 import tomllib
 from pathlib import Path
@@ -42,7 +44,80 @@ def sha256(p: Path) -> str:
     return h.hexdigest()
 
 
-def build(root: Path | str, claims_path: Path | None = None) -> dict:
+#: Croissant 1.1's atomic types, in full. The spec's table lists exactly these
+#: five -- there is no Time, and there is no unit mechanism anywhere in the
+#: format, which is why units go in our own namespace beside the field.
+_ATOMIC = ("sc:Boolean", "sc:Date", "sc:Float", "sc:Integer", "sc:Text")
+
+
+def _content_url(root: Path, rel: str, out_dir: Path | str | None) -> str:
+    """The path a CONSUMER will resolve, relative to where the JSON-LD lands."""
+    if out_dir is None:
+        return rel
+    try:
+        return os.path.relpath(root / rel, Path(out_dir))
+    except ValueError:
+        # Different drives on Windows; an absolute path still loads.
+        return str((root / rel).resolve())
+
+
+def _data_type(root: Path, files: list, column: str) -> str:
+    """`sc:Integer` / `sc:Float` / `sc:Text`, read off the column itself.
+
+    Croissant exists so a loader knows what a column IS -- claimcheck's own
+    `dcat.py` puts it as "column 3 is a float you extract from data.csv". Every
+    field was emitted as `sc:Text` regardless, so `dG_exp` reached a consumer as
+    b'-8.546824' and every downstream cast was theirs to get right.
+
+    Inferred rather than declared, because a `type =` key in `context.toml`
+    would be a second place for the truth to live and the CSV is the first.
+    An EMPTY column stays `sc:Text`: nothing about it is known, and guessing
+    Float for a column with no values is the confident-wrong answer.
+    """
+    vals = []
+    for rel in files:
+        p = root / rel
+        if not p.is_file():
+            continue
+        with p.open(newline="", encoding="utf-8-sig") as fh:
+            for r in csv.DictReader(fh):
+                v = str(r.get(column, "")).strip()
+                if v:
+                    vals.append(v)
+    if not vals:
+        return "sc:Text"
+    try:
+        for v in vals:
+            int(v)
+        return "sc:Integer"
+    except ValueError:
+        pass
+    try:
+        for v in vals:
+            f = float(v)
+            if f != f or f in (float("inf"), float("-inf")):
+                return "sc:Text"      # non-finite is not a Float to a loader
+        return "sc:Float"
+    except ValueError:
+        return "sc:Text"
+
+
+def build(root: Path | str, claims_path: Path | None = None,
+          out_dir: Path | str | None = None) -> dict:
+    """`out_dir` is where the JSON-LD will be WRITTEN, and it matters.
+
+    `mlcroissant` resolves a relative `contentUrl` against the folder holding
+    the JSON-LD file (`operations/download.py:48`, `filepath = ctx.folder /
+    url`), not against the project root. Emitting the project-root-relative
+    path put `data/x.csv` in a file at `results/croissant.json`, so every
+    consumer looked for `results/data/x.csv` and found nothing.
+
+    The result validated cleanly, which is what made it worth fixing rather
+    than noticing: `mlc.Dataset(jsonld=...)` accepted the metadata and only
+    `ds.records()` failed, so a test that validates and never reads passes on a
+    Croissant that no one can load. Measured on this package's own example,
+    2026-08-17 -- 0 records; with the file moved beside the data, 32.
+    """
     root = Path(root)          # same reason as `relate.check`
     ctx = tomllib.loads((root / "context.toml").read_text())
     proj = ctx["project"]
@@ -67,7 +142,8 @@ def build(root: Path | str, claims_path: Path | None = None) -> dict:
         for rel in d["files"]:
             p_ = root / rel
             fo = {"@type": "cr:FileObject", "@id": slug(Path(rel).name),
-                  "name": slug(Path(rel).name), "contentUrl": rel,
+                  "name": slug(Path(rel).name),
+                  "contentUrl": _content_url(root, rel, out_dir),
                   "encodingFormat": "text/csv", "sha256": sha256(p_)}
             # THE ORIGIN TRAVELS WITH THE FILE. A consumer who cannot tell a
             # computed file from one somebody dropped in by hand has been given
@@ -84,7 +160,7 @@ def build(root: Path | str, claims_path: Path | None = None) -> dict:
             f = {"@type": "cr:Field",
                  "@id": f"{first}_records/{v['name']}", "name": v["name"],
                  "description": v.get("description", ""),
-                 "dataType": "sc:Text",
+                 "dataType": _data_type(root, d["files"], v["name"]),
                  "source": {"fileObject": {"@id": first},
                             "extract": {"column": v["name"]}}}
             if v.get("unit") is not None:
@@ -138,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     a = argv if argv is not None else sys.argv[1:]
     root = Path(a[0]) if a else Path.cwd()
     out = Path(a[1]) if len(a) > 1 else root / "results/croissant.json"
-    d = build(root)
+    d = build(root, out_dir=out.parent)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(d, indent=2) + "\n")
     claims = d[f"{NS}claims"]

@@ -169,3 +169,55 @@ def test_the_shipped_example_reaches_both_verdicts():
     d = check(REPO / "example")
     assert d["verdicts"].get(AGREES) and d["verdicts"].get(REFUTED), d["verdicts"]
     assert set(d["datasets"]) == {"mace", "affinity"}
+
+
+def test_an_empty_resampling_unit_says_so(tmp_path):
+    """"Fewer than 3 independent units" is true of an empty column and of a
+    genuinely small one, and only one of those is fixed by more data.
+
+    From al_mace's `darby_predictions_rowan32_k4.csv`: `butina_cluster` is a
+    header over 32 empty rows, and two documents downstream name it as that
+    file's resampling unit.
+    """
+    import csv
+    from claimcheck.relate import check
+    (tmp_path / "data").mkdir()
+    with (tmp_path / "data" / "d.csv").open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["x", "y", "grp"])
+        for i in range(12):
+            w.writerow([i, 2 * i + (i % 3), ""])
+    (tmp_path / "context.toml").write_text(
+        '[project]\nname = "t"\n'
+        '[[datasets]]\nid = "d"\norigin = "computed"\nfiles = ["data/d.csv"]\n'
+        '[[variables]]\ndataset = "d"\nname = "x"\nunit = "1"\n'
+        '[[variables]]\ndataset = "d"\nname = "y"\nunit = "1"\n'
+        '[[relationships]]\nx = "d.x"\ny = "d.y"\nkind = "correlation"\n'
+        'method = "pearson"\nclaimed = 0.9\nresampling_unit = "grp"\n')
+    r = check(tmp_path)["relationships"][0]
+    assert r["verdict"] == "unverifiable"
+    assert "EMPTY" in r["why"], r["why"]
+    assert "too few groups" in r["why"], r["why"]
+
+
+def test_a_populated_resampling_unit_still_works(tmp_path):
+    """The other side: the same shape with the column filled in must NOT take
+    the branch above."""
+    import csv
+    from claimcheck.relate import check
+    (tmp_path / "data").mkdir()
+    with (tmp_path / "data" / "d.csv").open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["x", "y", "grp"])
+        for i in range(12):
+            w.writerow([i, 2 * i + (i % 3), f"c{i % 4}"])
+    (tmp_path / "context.toml").write_text(
+        '[project]\nname = "t"\n'
+        '[[datasets]]\nid = "d"\norigin = "computed"\nfiles = ["data/d.csv"]\n'
+        '[[variables]]\ndataset = "d"\nname = "x"\nunit = "1"\n'
+        '[[variables]]\ndataset = "d"\nname = "y"\nunit = "1"\n'
+        '[[relationships]]\nx = "d.x"\ny = "d.y"\nkind = "correlation"\n'
+        'method = "pearson"\nclaimed = 0.99\nresampling_unit = "grp"\n')
+    r = check(tmp_path)["relationships"][0]
+    assert "EMPTY" not in r["why"], r["why"]
+    assert r.get("n_units") == 4, r

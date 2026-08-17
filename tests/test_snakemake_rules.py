@@ -26,6 +26,8 @@ from pathlib import Path
 
 import pytest
 
+from _snakemake import snakemake_cmd, why_not
+
 REPO = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO / "example"
 GENERATED = EXAMPLE / ".tests" / "unit"
@@ -55,8 +57,8 @@ def test_snakemakes_generated_rule_tests_pass():
     """Each rule, run alone in a temp directory on a copied input slice."""
     if not GENERATED.is_dir():
         pytest.skip("run `snakemake --generate-unit-tests` in example/")
-    if shutil.which("snakemake") is None:
-        pytest.skip("snakemake is not installed")
+    if snakemake_cmd() is None:
+        pytest.skip(why_not())
     r = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:warnings",
          str(GENERATED)],

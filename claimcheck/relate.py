@@ -320,6 +320,22 @@ def check(root: Path | str) -> dict:
             continue
 
         pairs, clusters, dropped = _paired(rows, x, y, unit)
+        # A COLUMN THAT EXISTS AND IS EMPTY is not the same as a column with
+        # few clusters, and the bootstrap cannot tell them apart -- both arrive
+        # as "fewer than 3 independent units". The difference matters: one says
+        # the data is small, the other says the declared unit is not in the file
+        # at all. Measured on al_mace's `darby_predictions_rowan32_k4.csv`,
+        # where `butina_cluster` is a header over 32 empty rows and is named as
+        # that file's resampling unit in two places downstream.
+        if unit and clusters and not any(c.strip() for c in clusters):
+            out.append(verdict(
+                UNVERIFIABLE,
+                f"resampling unit {unit!r} is a column of the data but is EMPTY "
+                f"in all {len(clusters)} usable row(s), so there is nothing to "
+                f"cluster on. The unit was declared and the file does not carry "
+                f"it -- which is a different problem from having too few groups, "
+                f"and is not fixed by collecting more rows"))
+            continue
         row |= {"n_rows": len(pairs), "dropped": dropped}
         r = estimate([p[0] for p in pairs], [p[1] for p in pairs])
         if r is None:
