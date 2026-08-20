@@ -169,3 +169,13 @@ def test_the_old_behaviour_is_detectably_wrong(built):
     assert not (built / "results" / old_url).exists(), (
         "the pre-fix contentUrl resolves after all, so this test proves nothing")
     assert (built / "results" / new_url).is_file()
+
+
+def test_a_datasets_title_reaches_the_record_set():
+    """`[[datasets]].title` was declared on every dataset block in a 61-block
+    project and read by nothing. It says what a row is, which is what a
+    Croissant consumer shows beside the table."""
+    from claimcheck.croissant import build
+    d = build(REPO / "example")
+    described = {rs["@id"]: rs.get("description", "") for rs in d["recordSet"]}
+    assert any(v for v in described.values()), described

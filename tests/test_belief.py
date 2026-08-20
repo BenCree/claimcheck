@@ -471,16 +471,17 @@ def test_a_project_with_no_belief_table_is_refused_rather_than_answered(tmp_path
 
 
 def test_two_relationships_over_the_same_pair_cannot_be_named(tmp_path):
-    """`tested_by` identifies a relationship by its two columns. Two
+    """`tested_by` may identify a relationship by its two columns. Two
     relationships over the same pair make that ambiguous, and picking one would
-    attach a belief to whichever happened to be first."""
+    attach a belief to whichever happened to be first — so the pair stops being
+    a usable name and the refusal points at `id` instead."""
     work = tmp_path / "example"
     shutil.copytree(EXAMPLE, work)
     d = relate.check(work)
     d["relationships"].append(dict(d["relationships"][0]))
     (work / "results").mkdir(parents=True, exist_ok=True)
     (work / "results" / "claims.json").write_text(json.dumps(d, indent=2))
-    with pytest.raises(BeliefError, match="two relationships"):
+    with pytest.raises(BeliefError, match="are over that pair of columns"):
         BeliefGraph.from_project(work)
 
 
@@ -981,3 +982,61 @@ def test_defined_in_resolves_siblings_from_a_relative_root(tmp_path, monkeypatch
     monkeypatch.chdir(tmp_path / "reader")
     g = BeliefGraph.from_project(".")
     assert g.claims[0].status == "assumed"
+
+
+# ---------------------------------------------------------------------------
+# Naming one of two relationships over the same columns
+# ---------------------------------------------------------------------------
+
+def _rel(x, y, status="measured", rid=""):
+    r = {"x": x, "y": y, "status": status, "why": "the fixture said so"}
+    if rid:
+        r["id"] = rid
+    return r
+
+
+def test_a_claim_can_name_a_relationship_by_id():
+    """Declaring one pair of columns twice at two resampling units is worth
+    doing — the row-level interval is what most published numbers use, the
+    cluster-level one is what the unit of independence is. `"x ~ y"` cannot
+    tell them apart, so an id can."""
+    rec = BeliefGraph._index({"relationships": [
+        _rel("a.p", "a.q", "measured", rid="by_row"),
+        _rel("a.p", "a.q", "falsified", rid="by_cluster")]})
+    g = BeliefGraph.from_dict(
+        {"nodes": [{"id": "a", "kind": "method"}, {"id": "b", "kind": "method"}],
+         "claims": [{"subject": "a", "predicate": "approximates",
+                     "object": "b", "tested_by": "by_cluster"}]},
+        recomputed=rec)
+    assert g.claims[0].status == "falsified"
+
+
+def test_naming_an_ambiguous_pair_says_what_to_do_about_it():
+    """Two relationships over one pair and no id. The old message said
+    "distinguish them", which named no way to do it."""
+    rec = BeliefGraph._index({"relationships": [
+        _rel("a.p", "a.q", "measured"), _rel("a.p", "a.q", "falsified")]})
+    with pytest.raises(BeliefError, match="two resampling units"):
+        BeliefGraph.from_dict(
+            {"nodes": [{"id": "a", "kind": "method"},
+                       {"id": "b", "kind": "method"}],
+             "claims": [{"subject": "a", "predicate": "approximates",
+                         "object": "b", "tested_by": "a.p ~ a.q"}]},
+            recomputed=rec)
+
+
+def test_a_unique_pair_still_works_without_an_id():
+    """Every context written before ids existed keeps working."""
+    rec = BeliefGraph._index({"relationships": [_rel("a.p", "a.q", "falsified")]})
+    g = BeliefGraph.from_dict(
+        {"nodes": [{"id": "a", "kind": "method"}, {"id": "b", "kind": "method"}],
+         "claims": [{"subject": "a", "predicate": "approximates",
+                     "object": "b", "tested_by": "a.p ~ a.q"}]},
+        recomputed=rec)
+    assert g.claims[0].status == "falsified"
+
+
+def test_two_relationships_sharing_an_id_are_refused():
+    with pytest.raises(BeliefError, match="share the id"):
+        BeliefGraph._index({"relationships": [
+            _rel("a.p", "a.q", rid="same"), _rel("a.r", "a.s", rid="same")]})

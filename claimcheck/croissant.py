@@ -168,11 +168,20 @@ def build(root: Path | str, claims_path: Path | None = None,
                 f[f"{NS}unitSystem"] = "UDUNITS-2"
             fields.append(f)
         if fields:
-            record_sets.append({"@type": "cr:RecordSet",
-                                "@id": f"{first}_records",
-                                "name": f"{first}_records",
-                                f"{NS}dataset": d["id"],
-                                "field": fields})
+            rs = {"@type": "cr:RecordSet",
+                  "@id": f"{first}_records",
+                  "name": f"{first}_records",
+                  f"{NS}dataset": d["id"],
+                  "field": fields}
+            # A dataset's `title` says in one sentence what a row of it IS, and
+            # until 2026-08-20 nothing read it. Every one of 61 dataset blocks
+            # in the project this was found in declared one, and three in this
+            # package's own example — all of it written carefully and arriving
+            # nowhere. It belongs in the record set's description, which is the
+            # field a Croissant consumer shows beside the table.
+            if d.get("title"):
+                rs["description"] = str(d["title"]).strip()
+            record_sets.append(rs)
 
     return {
         "@context": {**_CROISSANT_CONTEXT, "@language": "en", "cc": NS},

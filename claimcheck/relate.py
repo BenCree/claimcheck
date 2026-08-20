@@ -237,6 +237,15 @@ def check(root: Path | str) -> dict:
         yd, y = _ref(rel["y"], only)
         unit = rel.get("resampling_unit") or sets[xd]["spec"].get("resampling_unit")
         row: dict = {
+            # OPTIONAL, AND THE ONLY WAY TO NAME ONE OF A PAIR. Declaring the
+            # same two columns twice at two resampling units is a legitimate
+            # and useful thing to do — the row-level interval is what most
+            # published numbers use, and the cluster-level one is what the
+            # unit of independence actually is. Both belong. But a belief claim
+            # names its verdict by `"x ~ y"`, which cannot tell them apart, so
+            # without an id neither could be tested. Empty is fine when the
+            # pair is unique.
+            "id": str(rel.get("id", "") or ""),
             "x": f"{xd}.{x}", "y": f"{yd}.{y}",
             "x_dataset": xd, "y_dataset": yd,
             "cross_dataset": xd != yd,

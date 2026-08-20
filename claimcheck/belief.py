@@ -464,9 +464,18 @@ class BeliefGraph:
                 f"{where} is tested by {tested!r}, but no recomputed verdicts "
                 f"were supplied. Load with `BeliefGraph.from_project`, which "
                 f"reads `results/claims.json`, or pass `recomputed=`")
+        if f"__ambiguous__{tested}" in recomputed:
+            n = recomputed[f"__ambiguous__{tested}"]["__n"]
+            raise BeliefError(
+                f"{where} is tested by {tested!r}, and {n} relationships in "
+                f"`results/claims.json` are over that pair of columns — most "
+                f"often the same claim at two resampling units, which is worth "
+                f"declaring and cannot be named this way. Give each an `id` in "
+                f"`[[relationships]]` and put the id in `tested_by`")
         r = recomputed.get(tested)
         if r is None:
-            known = ", ".join(sorted(recomputed)) or "none"
+            known = ", ".join(sorted(k for k in recomputed
+                                     if not k.startswith("__ambiguous__"))) or "none"
             raise BeliefError(
                 f"{where} is tested by {tested!r}, which names no relationship "
                 f"in `results/claims.json`. Known: {known}")
@@ -539,18 +548,37 @@ class BeliefGraph:
                 f"experiment has not produced rows yet, that is the honest "
                 f"state and there is nothing to run: say so where a reader "
                 f"will see it, and leave the claims pre-registered")
+        return BeliefGraph._index(json.loads(path.read_text()))
+
+    @staticmethod
+    def _index(doc: dict) -> dict[str, dict]:
+        """Verdicts, keyed by relationship id and by `"x ~ y"` where unique."""
         out: dict[str, dict] = {}
-        for r in json.loads(path.read_text())["relationships"]:
+        ambiguous: dict[str, int] = {}
+        for r in doc["relationships"]:
+            rid = str(r.get("id", "") or "")
+            if rid:
+                if rid in out:
+                    raise BeliefError(
+                        f"two relationships share the id {rid!r}. "
+                        f"An id exists to name one of them")
+                out[rid] = r
+            # The pair is ALSO a key, so every context written before ids
+            # existed keeps working. Where two relationships share a pair the
+            # key is withdrawn rather than pointing at one of them: a belief
+            # attached to whichever came first is a belief nobody chose.
             key = f"{r['x']} ~ {r['y']}"
-            if key in out:
-                # Two relationships over the same pair of columns — a different
-                # method, or a different claimed value. Picking one would
-                # attach a belief to whichever happened to be first.
-                raise BeliefError(
-                    f"two relationships in {path} are both {key!r}, so "
-                    f"`tested_by` cannot name one of them. Distinguish them, "
-                    f"or do not test a claim with them")
-            out[key] = r
+            if key in out or key in ambiguous:
+                out.pop(key, None)
+                ambiguous[key] = ambiguous.get(key, 1) + 1
+            else:
+                out[key] = r
+        for key, n in ambiguous.items():
+            # Not raised here. A project may legitimately declare a pair twice
+            # and test neither of them, or test them by id — and refusing the
+            # whole load for a pair nobody names would stop a correct project
+            # building. `_claim` raises if a claim actually reaches for it.
+            out[f"__ambiguous__{key}"] = {"__n": n}
         return out
 
     # --------------------------------------------------------------- closure
