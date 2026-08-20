@@ -1,0 +1,17 @@
+{
+  "name": "psdi-metadata",
+  "statement": "PSDI's published SHACL shapes for their DCAT resource catalogue. Vendored so that validation is reproducible offline — a checker that fetches its shapes over the network at run time cannot say what it checked against, and says something different on a train.",
+  "source": "https://github.com/PSDI-UK/metadata",
+  "license": "CC0-1.0",
+  "upstream_commit": "94855caf4e3d9912190e058e5947d116d23fc18c",
+  "upstream_committed": "2026-08-04T08:57:34Z",
+  "retrieved": "2026-08-05T18:08:55Z",
+  "files": {
+    "psdi-dcat-shacl.ttl": {
+      "sha256": "89a9ab04934e335be711ddafed35f21149f649231eb9c5496dffa4891e050412",
+      "bytes": 68025
+    }
+  },
+  "vendored_subset": "Upstream also publishes `psdi-dcat-ext.ttl` (the DCAT extension vocabulary) and `psdi-voc.ttl` (the SKOS vocabulary). Neither is vendored, because `psdi.validate()` parses the shapes graph and nothing else, and shipping a file no code opens is the carried weight this package's dependency test exists to refuse. Measured, not assumed: validating the same record with the shapes alone and with all three files gives the identical violation set — `tests/test_psdi.py::test_the_vendored_subset_is_the_whole_shapes_graph` re-measures it against the upstream copy when one is present, and skips honestly when it is not.",
+  "note": "Pinned to a commit, not to `main`. The shapes are actively refined — the upstream CHANGELOG records SHACL updates on 2026-07-02, 07-15 and 07-20 — so `main` is a moving target and a conformance report against a moving target does not say what it means. To move: fetch the new commit, replace the file, update `sha256`, `bytes`, `upstream_commit` and `upstream_committed` here, and re-run the suite. `tests/test_psdi.py` fails until the digest matches the bytes."
+}

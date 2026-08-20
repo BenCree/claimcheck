@@ -1,0 +1,1178 @@
+@prefix adms: <http://www.w3.org/ns/adms#> .
+@prefix dc11: <http://purl.org/dc/elements/1.1/> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix psdiDcatShacl: <http://metadata.psdi.ac.uk/psdi-dcat-shacl#> .
+@prefix psdiDcatExt: <http://metadata.psdi.ac.uk/psdi-dcat-ext#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix skosxl: <http://www.w3.org/2008/05/skos-xl#> .
+@prefix spdx: <http://spdx.org/rdf/terms#> .
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+psdiDcatShacl:shacl dcterms:title "PSDI SHACL for validating PSDI Resource Catalogue DCAT"@en ;
+	<rdfs:label> "PSDI SHACL for validating PSDI DCAT"@en ;
+	dcterms:description "Physical Sciences Data Infratructure (PSDI) Shapes Constraint Language (SHACL) for validating PSDI Resource Catalogue in Data Catalog Vocabulary (DCAT) format"@en ;
+	dc11:Version "1.0.0"@en ;
+	dcterms:created "2025-05-15T12:01:01Z"^^xsd:dateTime ;
+	dcterms:modified "2025-05-15T14:37:01Z"^^xsd:dateTime ;
+	dcterms:creator <http://orcid.org/0000-0003-2397-1996> ;
+	dcterms:publisher <http://www.psdi.ac.uk> ;
+	dcterms:license <https://spdx.org/licenses/CC0-1.0.html> ;
+	foaf:fundedBy <http://ror.org/0439y7842> ;
+	dc11:subject <http://data.europa.eu/8mn/euroscivoc/3d76a7f4-5a16-411e-ae44-7b712d5222ee>,
+        <http://data.europa.eu/8mn/euroscivoc/64605fff-1946-4fd4-b021-e2e83b71dcac> .
+
+<http://orcid.org/0000-0003-2397-1996> foaf:name "Aileen Day"@en ;
+	foaf:openid "http://orcid.org/0000-0003-2397-1996"@en ;
+	a foaf:Person .
+
+<http://www.psdi.ac.uk> foaf:name "Physical Sciences Data Infrastructure"@en ;
+	foaf:openid "http://www.psdi.ac.uk"@en ;
+	a foaf:Organization .
+
+<https://spdx.org/licenses/CC0-1.0.html> <rdfs:label> "Creative Commons Zero v1.0 Universal"@en ;
+	a dcterms:LicenseDocument .
+<http://ror.org/0439y7842> foaf:name "Engineering and Physical Sciences Research Council (EPSRC)"@en ;
+	foaf:openid "http://ror.org/0439y7842"@en ;
+	a foaf:Organization .
+<http://data.europa.eu/8mn/euroscivoc/3d76a7f4-5a16-411e-ae44-7b712d5222ee> <rdfs:label> "natural sciences"@en ;
+	a skosxl:Label .
+<http://data.europa.eu/8mn/euroscivoc/64605fff-1946-4fd4-b021-e2e83b71dcac> <rdfs:label> "engineering and technology"@en ;
+	a skosxl:Label .
+
+###################### Main Classes #######################
+
+psdiDcatShacl:ResourceNodeShape a sh:NodeShape ;
+  sh:closed true ;
+  sh:name "Resource" ;
+  sh:nodeKind sh:IRI ;
+  sh:description "A collection of DCAT Resources."@en ;
+  sh:targetClass dcat:Resource ;
+  sh:ignoredProperties ( rdf:type ) ;
+
+  sh:property
+    psdiDcatShacl:StatusPropertyShape ,
+    psdiDcatShacl:VersionNotesPropertyShape ,
+    psdiDcatShacl:ContactPointPropertyShape ,
+    psdiDcatShacl:KeywordPropertyShape ,
+    psdiDcatShacl:LandingPagePropertyShape ,
+    psdiDcatShacl:QualifiedRelationPropertyShape ,
+    psdiDcatShacl:ThemePropertyShape ,
+    psdiDcatShacl:VersionPropertyShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:CreatorPropertyShape ,
+    psdiDcatShacl:DescriptionPropertyShape ,
+    psdiDcatShacl:IdentifierPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:LanguagePropertyShape ,
+    psdiDcatShacl:LicensePropertyShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:PublisherPropertyShape ,
+    psdiDcatShacl:TitlePropertyShape ,
+    psdiDcatShacl:DCTypePropertyShape ,
+    psdiDcatShacl:QualifiedAttributionPropertyShape ,
+    psdiDcatShacl:LabelPropertyShape ,
+
+    psdiDcatShacl:FurtherInformationPropertyShape ,
+    psdiDcatShacl:LogoURLPropertyShape ,
+    psdiDcatShacl:DisplayPriorityPropertyShape ,
+    psdiDcatShacl:BibliographicCitationOptionalPropertyShape ,
+    psdiDcatShacl:InCatalogPropertyShape ,
+    psdiDcatShacl:IsPartOfPropertyShape ;
+
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Resource" .
+
+psdiDcatShacl:CatalogNodeShape a sh:NodeShape ;
+  sh:closed true ;
+  sh:name "Catalog" ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcat:Catalog ;
+  sh:description "dcat:Catalog represents a catalog, which is a dataset in which each individual item is a metadata record describing some resource; the scope of dcat:Catalog is collections of metadata about datasets, data services, or other resource types. In PSDI the top-level resource catalogue is grouped into dcat:catalogs which are referred to as 'resource themes'. Each is a set of data and/or services and/or tools and/or guidance that can be accessed through the PSDI platform and has been developed by a PSDI contributing group relating to a particular Physical Sciences research theme (e.g. as part of a Pathfinder project)."@en ;
+  sh:targetClass dcat:Catalog ;
+  sh:ignoredProperties ( rdf:type ) ;
+
+  sh:property
+    psdiDcatShacl:StatusPropertyShape ,
+    psdiDcatShacl:VersionNotesPropertyShape ,
+    psdiDcatShacl:ContactPointPropertyShape ,
+    psdiDcatShacl:KeywordPropertyShape ,
+    psdiDcatShacl:LandingPagePropertyShape ,
+    psdiDcatShacl:QualifiedRelationPropertyShape ,
+    psdiDcatShacl:ThemePropertyShape ,
+    psdiDcatShacl:VersionPropertyShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:CreatorPropertyShape ,
+    psdiDcatShacl:DescriptionPropertyShape ,
+    psdiDcatShacl:IdentifierPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:LanguagePropertyShape ,
+    psdiDcatShacl:LicensePropertyOptionalShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:PublisherPropertyShape ,
+    psdiDcatShacl:TitlePropertyShape ,
+    psdiDcatShacl:DCTypePropertyShape ,
+    psdiDcatShacl:QualifiedAttributionPropertyShape ,
+    psdiDcatShacl:LabelPropertyShape ,
+
+    psdiDcatShacl:FurtherInformationPropertyShape ,
+    psdiDcatShacl:LogoURLPropertyShape ,
+    psdiDcatShacl:DisplayPriorityPropertyShape ,
+    psdiDcatShacl:BibliographicCitationOptionalPropertyShape ,
+    psdiDcatShacl:InCatalogPropertyShape ,
+    psdiDcatShacl:IsPartOfPropertyShape ,
+
+    psdiDcatShacl:HasPartPropertyShape ,
+    psdiDcatShacl:ThemeTaxonomyPropertyShape ,
+    psdiDcatShacl:CatalogPropertyShape ,
+    psdiDcatShacl:DatasetPropertyShape ,
+    psdiDcatShacl:DataServicePropertyShape ,
+    psdiDcatShacl:ToolPropertyShape ,
+    psdiDcatShacl:GuidancePropertyShape ;
+
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Catalog" .
+
+psdiDcatShacl:DatasetNodeShape a sh:NodeShape ;
+  sh:name "Dataset" ;
+  sh:description "A collection of data, published or curated by a single agent, and available for access or download in one or more representations."@en ;
+  sh:targetClass dcat:Dataset ;
+  sh:nodeKind sh:IRI ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+
+  sh:property
+    psdiDcatShacl:StatusPropertyShape ,
+    psdiDcatShacl:VersionNotesPropertyShape ,
+    psdiDcatShacl:ContactPointPropertyShape ,
+    psdiDcatShacl:KeywordPropertyShape ,
+    psdiDcatShacl:LandingPagePropertyShape ,
+    psdiDcatShacl:QualifiedRelationPropertyShape ,
+    psdiDcatShacl:ThemePropertyShape ,
+    psdiDcatShacl:VersionPropertyShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:CreatorPropertyShape ,
+    psdiDcatShacl:DescriptionPropertyShape ,
+    psdiDcatShacl:IdentifierPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:LanguagePropertyShape ,
+    psdiDcatShacl:LicensePropertyOptionalShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:PublisherPropertyShape ,
+    psdiDcatShacl:TitlePropertyShape ,
+    psdiDcatShacl:DCTypePropertyShape ,
+    psdiDcatShacl:QualifiedAttributionPropertyShape ,
+    psdiDcatShacl:LabelPropertyShape ,
+
+    psdiDcatShacl:FurtherInformationPropertyShape ,
+    psdiDcatShacl:LogoURLPropertyShape ,
+    psdiDcatShacl:DisplayPriorityPropertyShape ,
+    psdiDcatShacl:BibliographicCitationOptionalPropertyShape ,
+    psdiDcatShacl:InCatalogPropertyShape ,
+    psdiDcatShacl:IsPartOfPropertyShape ,
+
+    psdiDcatShacl:AccrualPeriodicityPropertyShape ,
+    psdiDcatShacl:DistributionPropertyShape ;
+
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Dataset" .
+
+psdiDcatShacl:DataServiceNodeShape a sh:NodeShape ;
+  sh:name "Data Service" ;
+  sh:description "A collection of operations that provides access to one or more datasets or data processing functions."@en ;
+  sh:targetClass dcat:DataService ;
+  sh:nodeKind sh:IRI ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+
+  sh:property
+
+    psdiDcatShacl:StatusPropertyShape ,
+    psdiDcatShacl:VersionNotesPropertyShape ,
+    psdiDcatShacl:ContactPointPropertyShape ,
+    psdiDcatShacl:KeywordPropertyShape ,
+    psdiDcatShacl:LandingPagePropertyShape ,
+    psdiDcatShacl:QualifiedRelationPropertyShape ,
+    psdiDcatShacl:ThemePropertyShape ,
+    psdiDcatShacl:VersionPropertyShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:CreatorPropertyShape ,
+    psdiDcatShacl:DescriptionPropertyShape ,
+    psdiDcatShacl:IdentifierPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:LanguagePropertyShape ,
+    psdiDcatShacl:LicensePropertyOptionalShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:PublisherPropertyShape ,
+    psdiDcatShacl:TitlePropertyShape ,
+    psdiDcatShacl:DCTypePropertyShape ,
+    psdiDcatShacl:QualifiedAttributionPropertyShape ,
+    psdiDcatShacl:LabelPropertyShape ,
+
+    psdiDcatShacl:FurtherInformationPropertyShape ,
+    psdiDcatShacl:LogoURLPropertyShape ,
+    psdiDcatShacl:DisplayPriorityPropertyShape ,
+    psdiDcatShacl:BibliographicCitationOptionalPropertyShape ,
+    psdiDcatShacl:InCatalogPropertyShape ,
+    psdiDcatShacl:IsPartOfPropertyShape ,
+
+    psdiDcatShacl:EndPointDescriptionPropertyShape ,
+    psdiDcatShacl:EndPointUrlPropertyShape ,
+    psdiDcatShacl:ServesDatasetPropertyShape ;
+
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Data_Service" .
+
+psdiDcatShacl:ToolNodeShape a sh:NodeShape ;
+  sh:name "Tool" ;
+  sh:description "A tool is software* - downloaded from the PSDI platform and run via one's own non-PSDI infrastructure - that facilitates access to or performs data processing functions on data (available through the PSDI platform or other data). *'Software' - 'Computer programs, procedures, and possibly associated documentation and data pertaining to the operation of a computer System.' [IEEE Standard Computer Dictionary, 1991, https://doi.org/10.1109/IEEESTD.1991.106963]"@en ;
+  sh:targetClass psdiDcatExt:Tool ;
+  sh:nodeKind sh:IRI ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+
+  sh:property
+    psdiDcatShacl:StatusPropertyShape ,
+    psdiDcatShacl:VersionNotesPropertyShape ,
+    psdiDcatShacl:ContactPointPropertyShape ,
+    psdiDcatShacl:KeywordPropertyShape ,
+    psdiDcatShacl:LandingPagePropertyShape ,
+    psdiDcatShacl:QualifiedRelationPropertyShape ,
+    psdiDcatShacl:ThemePropertyShape ,
+    psdiDcatShacl:VersionPropertyShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:CreatorPropertyShape ,
+    psdiDcatShacl:DescriptionPropertyShape ,
+    psdiDcatShacl:IdentifierPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:LanguagePropertyShape ,
+    psdiDcatShacl:LicensePropertyShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:PublisherPropertyShape ,
+    psdiDcatShacl:TitlePropertyShape ,
+    psdiDcatShacl:DCTypePropertyShape ,
+    psdiDcatShacl:QualifiedAttributionPropertyShape ,
+    psdiDcatShacl:LabelPropertyShape ,
+
+    psdiDcatShacl:FurtherInformationPropertyShape ,
+    psdiDcatShacl:LogoURLPropertyShape ,
+    psdiDcatShacl:DisplayPriorityPropertyShape ,
+    psdiDcatShacl:BibliographicCitationOptionalPropertyShape ,
+    psdiDcatShacl:InCatalogPropertyShape ,
+    psdiDcatShacl:IsPartOfPropertyShape ,
+
+    psdiDcatShacl:DcatExtDownloadURLPropertyShape ,
+    psdiDcatShacl:DcatExtRepositoryURLPropertyShape ,
+    psdiDcatShacl:DcatExtInstallCommandPropertyShape ,
+    psdiDcatShacl:DcatExtProgrammingLanguagePropertyShape ,
+    psdiDcatShacl:DcatExtDeliveryFormatPropertyShape ,
+    psdiDcatShacl:DcatExtDevelopmentStatusPropertyShape ,
+    psdiDcatShacl:DcatExtByteSizePropertyShape ,
+    psdiDcatShacl:DcatExtExampleDataPropertyShape ,
+    psdiDcatShacl:DcatExtOperatingSystemPropertyShape ,
+    psdiDcatShacl:CheckSumPropertyShape ;
+
+  rdfs:seeAlso "https://metadata.psdi.ac.uk/psdi-dcat-ext#Tool" .
+
+psdiDcatShacl:GuidanceNodeShape a sh:NodeShape ;
+  sh:name "Guidance" ;
+  sh:description "Advice/information made available to PSDI users and contributors via the PSDI platform to provide guidance* about PSDI, its resources and data management and reproducibility principals."@en ;
+  sh:targetClass psdiDcatExt:Guidance ;
+  sh:nodeKind sh:IRI ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+
+  sh:property
+    psdiDcatShacl:StatusPropertyShape ,
+    psdiDcatShacl:VersionNotesPropertyShape ,
+    psdiDcatShacl:ContactPointPropertyShape ,
+    psdiDcatShacl:KeywordPropertyShape ,
+    psdiDcatShacl:LandingPagePropertyShape ,
+    psdiDcatShacl:QualifiedRelationPropertyShape ,
+    psdiDcatShacl:ThemePropertyShape ,
+    psdiDcatShacl:VersionPropertyShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:CreatorPropertyShape ,
+    psdiDcatShacl:DescriptionPropertyShape ,
+    psdiDcatShacl:IdentifierPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:LanguagePropertyShape ,
+    psdiDcatShacl:LicensePropertyOptionalShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:PublisherPropertyShape ,
+    psdiDcatShacl:TitlePropertyShape ,
+    psdiDcatShacl:DCTypePropertyShape ,
+    psdiDcatShacl:QualifiedAttributionPropertyShape ,
+    psdiDcatShacl:LabelPropertyShape ,
+
+    psdiDcatShacl:FurtherInformationPropertyShape ,
+    psdiDcatShacl:LogoURLPropertyShape ,
+    psdiDcatShacl:DisplayPriorityPropertyShape ,
+    psdiDcatShacl:BibliographicCitationOptionalPropertyShape ,
+    psdiDcatShacl:InCatalogPropertyShape ,
+    psdiDcatShacl:IsPartOfPropertyShape ;
+
+  rdfs:seeAlso "https://metadata.psdi.ac.uk/psdi-dcat-ext#Guidance" .
+
+psdiDcatShacl:DistributionNodeShape a sh:NodeShape ;
+  sh:name "Distribution" ;
+  sh:description "A specific representation of a dataset. A dataset might be available in multiple serializations that may differ in various ways, including natural language, media-type or format, schematic organization, temporal and spatial resolution, level of detail or profiles (which might specify any or all of the above)."@en ;
+  sh:targetClass dcat:Distribution ;
+  sh:nodeKind sh:IRI ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+
+  sh:property
+    psdiDcatShacl:OptionalTitlePropertyShape ,
+    psdiDcatShacl:OptionalDescriptionPropertyShape ,
+    psdiDcatShacl:DownloadURLPropertyShape ,
+    psdiDcatShacl:AccessURLPropertyShape ,
+    psdiDcatShacl:AccessServicePropertyShape ,
+    psdiDcatShacl:ByteSizePropertyShape ,
+    psdiDcatShacl:CompressFormatPropertyShape ,
+    psdiDcatShacl:PackageFormatPropertyShape ,
+    psdiDcatShacl:MediaTypePropertyShape ,
+    psdiDcatShacl:LicensePropertyOptionalShape ,
+    psdiDcatShacl:AccessRightsOptionalPropertyShape ,
+    psdiDcatShacl:ConformsToPropertyShape ,
+    psdiDcatShacl:IssuedPropertyShape ,
+    psdiDcatShacl:ModifiedPropertyShape ,
+    psdiDcatShacl:CheckSumPropertyShape ;
+
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Distribution" .
+
+psdiDcatShacl:RelationshipNodeShape a sh:NodeShape ;
+  sh:name "Relationship";
+  sh:description "An association class for attaching additional information to a relationship between DCAT Resources"@en ;
+  sh:targetClass  dcat:Relationship ;
+  sh:nodeKind sh:BlankNodeOrIRI ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+
+  sh:property [
+    sh:name "Relation" ;
+    sh:description "A related resource."@en ;
+    sh:path dcterms:relation ;
+    sh:nodeKind sh:IRI ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#http://purl.org/dc/terms/relation"
+    ], [
+    sh:name "QualifiedAttributionRole" ;
+    sh:description "The function of an entity or agent with respect to another entity or resource. May be used in a qualified-relation to specify the role of a resource with respect to another. It is recommended that the value be taken from a controlled vocabulary of agent roles. Values should be chosen from the list specified at: https://www.iana.org/assignments/link-relations/link-relations.xhtml"@en ;
+    sh:path dcat:hadRole ;
+    sh:nodeKind sh:IRI ;
+    sh:in (
+      <http://www.iana.org/assignments/relation/describedby>
+      <http://www.iana.org/assignments/relation/describes>
+    ) ;
+    sh:minCount 1 ;
+    rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:relationship_hadRole"
+  ] ;
+
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Relationship" .
+
+################################# Resource PropertyShapes ############################################
+
+psdiDcatShacl:StatusPropertyShape a sh:PropertyShape ;
+  sh:name "Status" ;
+  sh:path adms:status ;
+  sh:nodeKind sh:IRI ;
+  sh:maxCount 1 ;
+  sh:description "The status of the resource in the context of a particular workflow process [VOCAB-ADMS]. DCAT does not prescribe the use of any specific set of life-cycle statuses, but refers to existing standards and community practices fit for the relevant application scenario."@en ;
+  sh:in (
+    <http://purl.org/adms/status/Completed>
+    <http://purl.org/adms/status/Deprecated>
+    <http://purl.org/adms/status/UnderDevelopment>
+    <http://purl.org/adms/status/Withdrawn>
+  );
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_status" .
+
+psdiDcatShacl:VersionNotesPropertyShape a sh:PropertyShape ;
+  sh:name "Version Notes" ;
+  sh:description "A description of changes between this version and the previous version of the resource [VOCAB-ADMS](http://www.w3.org/TR/vocab-dcat-3/#bib-vocab-adms). Optional property in PSDI"@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path adms:versionNotes ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_version_notes" .
+
+psdiDcatShacl:ContactPointPropertyShape a sh:PropertyShape;
+  sh:name "Contact Point";
+  sh:description "Relevant contact information for the cataloged resource. Use vcard Kind to capture a vcard hasEmail or vcard hasURL"@en ;
+  sh:path dcat:contactPoint ;
+  sh:class vcard:Kind ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_contact_point" .
+
+psdiDcatShacl:KeywordPropertyShape a sh:PropertyShape ;
+  sh:name "Keyword";
+  sh:description "A keyword or tag describing the resource. Keywords used to retrieve this resource in a simple text search. What search terms would people looking for something like this enter? Who are they? What chemicals or materials are relevant? What instruments or equipment or computer techniques are relevant? Multiple keywords can be expressed as a list of strings."@en ;
+  sh:nodeKind sh:Literal;
+  sh:path dcat:keyword ;
+  sh:datatype xsd:string ;
+  sh:minCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_keyword" .
+
+psdiDcatShacl:LandingPagePropertyShape a sh:PropertyShape ;
+  sh:name "Landing Page" ;
+  sh:class foaf:Document ;
+  sh:path dcat:landingPage ;
+  sh:nodeKind sh:IRI;
+  sh:minCount 0 ;
+  sh:maxCount 1 ;
+  sh:description "A Web page that can be navigated to in a Web browser to gain access to the catalog, a dataset, its distributions and/or additional information. Note that the landing page might not give direct access to the resource - in some cases access may only be obtained through some Web page where the user needs to follow some links, provide some information and/or check some boxes first."@en ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_landing_page" .
+
+psdiDcatShacl:QualifiedRelationPropertyShape a sh:PropertyShape ;
+  sh:name "Qualified Relation" ;
+  sh:description "Link to a description of a relationship with another resource. describedBy: Refers to a resource providing information about the link's context. Advice/information made available to PSDI users and contributors via the PSDI platform to provide guidance about this resource or associated with it. This property should be populated with the @id of that Guidance resource. Can be a list if there are more than one."@en ;
+  sh:path dcat:qualifiedRelation ;
+  sh:class dcat:Relationship ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_qualified_relation" .
+
+psdiDcatShacl:ThemePropertyShape a sh:PropertyShape ;
+  sh:name "Theme" ;
+  sh:description "A main category of the resource. A resource can have multiple themes. In PSDI Please list any fields of science as defined by EuroSciVoc that describe this resource - see http://op.europa.eu/en/web/eu-vocabularies/concept-scheme/-/resource?uri=http://data.europa.eu/8mn/euroscivoc/40c0f173-baa3-48a3-9fe6-d6e8fb366a00"@en ;
+  sh:path dcat:theme ;
+  sh:class skos:Concept ;
+  sh:pattern "^(http(s)?://data.europa.eu/8mn/euroscivoc/|http(s)?://publications.europa.eu/resource/authority/8mn/euroscivoc/|http(s)?://metadata.psdi.ac.uk/psdi-voc-subject#)(.*)$";
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_theme" .
+
+psdiDcatShacl:VersionPropertyShape a sh:PropertyShape ;
+  sh:name "Version" ;
+  sh:description "The version indicator (name or identifier) of a resource. Use [semantic versioning](http://semver.org/) based on major, minor, and patch contributions. e.g. 1.1.1"@en ;
+  sh:path dcat:version ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:string ;
+  sh:pattern "^[0-9]*.[0-9]*(.[0-9]*)?$" ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_version" .
+
+psdiDcatShacl:AccessRightsOptionalPropertyShape a sh:PropertyShape ;
+  sh:name "Access Rights" ;
+  sh:description "Information about who can access the resource or an indication of its security status. Information about licenses and rights MAY be provided for the Resource. This should correspond to a value defined by Controlled Vocabularies for Repositories (https://vocabularies.coar-repositories.org/access_rights/ )."@en ;
+  sh:path dcterms:accessRights ;
+  sh:class dcterms:RightsStatement ;
+  sh:nodeKind sh:IRI ;
+  sh:in (
+    <http://purl.org/coar/access_right/c_abf2>
+    <http://purl.org/coar/access_right/c_16ec>
+    <http://purl.org/coar/access_right/c_f1cf>
+    <http://purl.org/coar/access_right/c_14cb>
+  ) ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_access_rights" .
+
+psdiDcatShacl:ConformsToPropertyShape a sh:PropertyShape ;
+  sh:name "Conforms To" ;
+  sh:description "An established standard to which the described resource conforms. Please enter any relevant standards as a url linking to that standard description, or list of urls."@en ;
+  sh:class dcterms:Standard ;
+  sh:path dcterms:conformsTo ;
+  sh:nodeKind sh:IRI ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_conforms_to" .
+
+psdiDcatShacl:CreatorPropertyShape a sh:PropertyShape ;
+  sh:name "Creator" ;
+  sh:description "The entity responsible for producing the resource. There may be more than one creator, specified by a list. Each should be expressed as a foaf:agent with human readable foaf:name and foaf:openid (which by preference should be an ORCID url)."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:path dcterms:creator ;
+  sh:class foaf:Agent ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_creator" .
+
+psdiDcatShacl:DescriptionPropertyShape a sh:PropertyShape ;
+  sh:name "Description" ;
+  sh:description "A free-text account of the resource. A description of what this resource is, why someone might want to use it and its key features."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path dcterms:description ;
+  sh:datatype xsd:string ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_description" .
+
+psdiDcatShacl:OptionalDescriptionPropertyShape a sh:PropertyShape ;
+  sh:name "Description" ;
+  sh:description "A free-text account of the resource. A description of what this resource is, why someone might want to use it and its key features."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path dcterms:description ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_description" .
+
+psdiDcatShacl:IdentifierPropertyShape a sh:PropertyShape ;
+  sh:name "Identifier" ;
+  sh:description "The identifier is a text string which is assigned to the resource to provide an unambiguous reference within a particular context. In DCAT this is a unique identifier of the resource being described or cataloged. In PSDI this is the url of the resource or resource theme being described in this PSDI catalogue."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:string ;
+  sh:path dcterms:identifier ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  sh:pattern "^(https:\\/\\/resources.psdi.ac.uk\\/)(catalogue|resource-theme|data|service|tool|guidance)?(\\/)?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|optimade(.*)|resourceCatalogue)?$" ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_identifier" .
+
+psdiDcatShacl:IssuedPropertyShape a sh:PropertyShape ;
+  sh:name "Issued" ;
+  sh:description "Date of formal issuance (e.g., publication) of the resource. this property SHOULD be set using the first known date of issuance. Specifiy date according to [ISO8601](http://en.wikipedia.org/wiki/ISO_8601) as type [xsd:dateTime](http://www.w3.org/2001/XMLSchema#dateTime) e.g. 2024-04-18T12:01:01Z"@en ;
+  sh:path dcterms:issued ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:dateTime ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_release_date" .
+
+psdiDcatShacl:LanguagePropertyShape a sh:PropertyShape ;
+  sh:name "Language" ;
+  sh:description "A language of the resource. This refers to the natural language used for textual metadata (i.e., titles, descriptions, etc.) of a cataloged resource (i.e., dataset or service) or the textual values of a dataset distribution. Repeat this property if the resource is available in multiple languages.Language should be expressed as a url defined in http://id.loc.gov/vocabulary/iso639-1.html and a label of the corresponding 2 letter code. e.g. en (http://id.loc.gov/vocabulary/iso639-1/en)."@en ;
+  sh:class dcterms:LinguisticSystem ;
+  sh:path dcterms:language ;
+  sh:nodeKind sh:IRI ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_language" .
+
+psdiDcatShacl:LicensePropertyShape a sh:PropertyShape ;
+  sh:name "License" ;
+  sh:description "A legal document under which the resource is made available. This should correspond to a value defined in the SPDX License List (https://spdx.org/licenses/ ) and should be expressed as a human readable label followed by the apropriate SPDX url e.g. CC-BY-4.0 (https://spdx.org/licenses/CC-BY-4.0.html)"@en ;
+  sh:class dcterms:LicenseDocument ;
+  sh:path dcterms:license ;
+  sh:nodeKind sh:IRI ;
+  sh:minCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_rights" .
+
+psdiDcatShacl:LicensePropertyOptionalShape a sh:PropertyShape ;
+  sh:name "License" ;
+  sh:description "A legal document under which the resource is made available. This should correspond to a value defined in the SPDX License List (https://spdx.org/licenses/ ) and should be expressed as a human readable label followed by the apropriate SPDX url e.g. CC-BY-4.0 (https://spdx.org/licenses/CC-BY-4.0.html)"@en ;
+  sh:class dcterms:LicenseDocument ;
+  sh:path dcterms:license ;
+  sh:nodeKind sh:IRI ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_rights" .
+
+psdiDcatShacl:ModifiedPropertyShape a sh:PropertyShape ;
+  sh:name "Modified" ;
+  sh:description "Most recent date on which the resource was changed, updated or modified. The value of this property indicates a change to the actual resource, not a change to the catalog record. An absent value MAY indicate that the resource has never changed after its initial publication, or that the date of last modification is not known, or that the resource is continuously updated. Specifiy date according to [ISO8601](http://en.wikipedia.org/wiki/ISO_8601) as type [xsd:dateTime](http://www.w3.org/2001/XMLSchema#dateTime)"@en ;
+  sh:path dcterms:modified ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:dateTime ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_update_date" .
+
+psdiDcatShacl:PublisherPropertyShape a sh:PropertyShape ;
+  sh:name "Publisher" ;
+  sh:description "The entity responsible for making the resource available. For many PSDI resources this will be PSDI (http://www.psdi.ac.uk). For other organisations, this should be expressed expressed as a foaf:Agent with human-readable foaf:name and foaf:openid (which should be the organisation's ROR ID (http://ror.org/) or failing that some other persistant url). There should only be one publisher for a resource."@en ;
+  sh:class foaf:Agent ;
+  sh:path dcterms:publisher ;
+  sh:nodeKind sh:IRI;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_publisher" .
+
+psdiDcatShacl:TitlePropertyShape a sh:PropertyShape ;
+  sh:name "Title" ;
+  sh:description "A name given to the resource. This is the full title (as opposed to label which is intended to be more concise). Its capitalisation should be title-case."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path dcterms:title ;
+  sh:datatype xsd:string ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_title" .
+
+psdiDcatShacl:OptionalTitlePropertyShape a sh:PropertyShape;
+  sh:closed true ;
+  sh:name "Title" ;
+  sh:description "A name given to the resource. This is the full title (as opposed to label which is intended to be more concise). Its capitalisation should be title-case."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path dcterms:title ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_title" .
+
+psdiDcatShacl:DCTypePropertyShape a sh:PropertyShape ;
+  sh:name "DctermsType" ;
+  sh:path dcterms:type ;
+  sh:class skos:Concept ;
+  sh:description "The nature or genre of the resource. Should correspond to a value in the DCMI terms vocabulary: https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#section-7. In general, PSDI resource themes will have value http://purl.org/dc/dcmitype/Collection, PSDI data will be http://purl.org/dc/dcmitype/Dataset; PSDI services will be http://purl.org/dc/dcmitype/Service; PSDI tools will be http://purl.org/dc/dcmitype/Software; and PSDI guidance will be http://purl.org/dc/dcmitype/Text but there may be other more appropriate choices in some cases."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:in ( <http://purl.org/dc/dcmitype/Collection>
+    <http://purl.org/dc/dcmitype/Dataset>
+    <http://purl.org/dc/dcmitype/Service>
+    <http://purl.org/dc/dcmitype/Software>
+    <http://purl.org/dc/dcmitype/Text>
+    <http://purl.org/dc/dcmitype/Event>
+    <http://purl.org/dc/dcmitype/Image>
+    <http://purl.org/dc/dcmitype/InteractiveResource>
+    <http://purl.org/dc/dcmitype/MovingImage>
+    <http://purl.org/dc/dcmitype/PhysicalObject>
+    <http://purl.org/dc/dcmitype/Sound>
+    <http://purl.org/dc/dcmitype/StillImage>
+  ) ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_type" .
+
+psdiDcatShacl:QualifiedAttributionPropertyShape a sh:PropertyShape ;
+  sh:name "Qualified Attribution" ;
+  sh:description "Agent having some form of responsibility for the resource."@en ;
+  sh:path prov:qualifiedAttribution ;
+  sh:class prov:Attribution ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:resource_qualified_attribution" .
+
+psdiDcatShacl:LabelPropertyShape a sh:PropertyShape ;
+  sh:name "Label";
+  sh:description "Used to provide a human-readable version of a resource's name. This is a shortened version of the title intended as a concise label in PSDI user interfaces."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path rdfs:label ;
+  sh:datatype xsd:string ;
+  sh:minCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/rdf-schema/#ch_label" .
+
+psdiDcatShacl:FurtherInformationPropertyShape a sh:PropertyShape ;
+  sh:name "Further Information" ;
+  sh:description "URL containing further information about this Resource for PSDI users and contributors."@en ;
+  sh:class rdfs:Resource ;
+  sh:path psdiDcatExt:furtherInformation ;
+  sh:nodeKind sh:IRI ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/psdi-dcat-ext#furtherInformation" .
+
+psdiDcatShacl:LogoURLPropertyShape a sh:PropertyShape ;
+  sh:name "Logo URL" ;
+  sh:description "URL to apporopriate logo image to display with this resource."@en ;
+  sh:class rdfs:Resource ;
+  sh:path psdiDcatExt:logoURL ;
+  sh:nodeKind sh:IRI ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/psdi-dcat-ext#logoURL" .
+
+psdiDcatShacl:DisplayPriorityPropertyShape a sh:PropertyShape ;
+  sh:name "Display Priority" ;
+  sh:description "Number used to determine order of resources when listed alongside others."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path psdiDcatExt:displayPriority ;
+  sh:datatype xsd:double ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/psdi-dcat-ext#displayPriority" .
+
+psdiDcatShacl:BibliographicCitationOptionalPropertyShape a sh:PropertyShape ;
+  sh:name "Bibliographic Citation" ;
+  sh:description "A bibliographic reference for the resource. Preferred way to cite this resource theme or resource. This field is optional, but should be filled in if the resource license requires its users to provide attribution. Recommended practice is to include sufficient bibliographic detail to identify the resource as unambiguously as possible."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path dcterms:bibliographicCitation ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#bibliographicCitation" .
+
+psdiDcatShacl:InCatalogPropertyShape a sh:PropertyShape ;
+  sh:name "In Catalog" ;
+  sh:description "Inverse of dcat:resource. Primary parent resource theme that this resource belongs to. If this resource belongs to a resource theme (true for everything apart from core-PSDI resources) this property should be populated with the @id of the DCAT catalog that contains it."@en ;
+  sh:pattern "^(http:\\/\\/metadata.psdi.ac.uk\\/psdi-dcat\\/|psdiDcat:)(resource-theme)\\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$" ;
+  sh:nodeKind sh:IRI ;
+  sh:path dcat:inCatalog .
+
+psdiDcatShacl:IsPartOfPropertyShape a sh:PropertyShape ;
+  sh:name "Is Part Of" ;
+  sh:description "A related resource in which the described resource is physically or logically included. This property is intended to be used with non-literal values. This property is an inverse property of dcterms:hasPart. Additional (non-primary) parent resource theme that this resource belongs to - can be multiple values. If this resource belongs to additional resource theme(s), as well as its primary resource theme then this property should be populated with the @id of the DCAT catalog that contains it."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:path dcterms:isPartOf ;
+  sh:pattern "^(http:\\/\\/metadata.psdi.ac.uk\\/psdi-dcat\\/|psdiDcat:)(resource-theme)\\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$" ;
+  rdfs:seeAlso "http://purl.org/dc/terms/isPartOf" .
+
+################################# Catalogue PropertyShapes ############################################
+
+psdiDcatShacl:HasPartPropertyShape a sh:PropertyShape ;
+  sh:name "Has Part" ;
+  sh:description "A related resource that is included either physically or logically in the described resource. This property is intended to be used with non-literal values. This property is an inverse property of dcterms:isPartOf. Used to indicate resources which are part of this resource theme but it is not their primary resource theme."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:pattern "^(http:\\/\\/metadata.psdi.ac.uk\\/psdi-dcat\\/|psdiDcat:)(data|service|tool|guidance)\\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|optimade(.*))$" ;
+  sh:path dcterms:hasPart ;
+  rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#hasPart" .
+
+psdiDcatShacl:ThemeTaxonomyPropertyShape a sh:PropertyShape ;
+  sh:name "Theme taxomony" ;
+  sh:description "A knowledge organization system (KOS) used to classify the resources documented in the catalog (e.g., datasets and services)."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class skos:ConceptScheme ;
+  sh:path dcat:themeTaxonomy ;
+  rdfs:seeAlso "https://www.w3.org/ns/dcat#themeTaxonomy" .
+
+psdiDcatShacl:CatalogPropertyShape a sh:PropertyShape ;
+  sh:name "Catalog" ;
+  sh:description "dcat:Catalog represents a catalog, which is a dataset in which each individual item is a metadata record describing some resource; the scope of dcat:Catalog is collections of metadata about datasets, data services, or other resource types. In PSDI the top-level resource catalogue is grouped into dcat:catalogs which are referred to as 'resource themes'. Each is a set of data and/or services and/or tools and/or guidance that can be accessed through the PSDI platform and has been developed by a PSDI contributing group relating to a particular Physical Sciences research theme (e.g. as part of a Pathfinder project)."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcat:Catalog ;
+  sh:path dcat:Catalog ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Catalog" .
+
+psdiDcatShacl:DatasetPropertyShape a sh:PropertyShape ;
+  sh:name "Dataset" ;
+  sh:description "A collection of data, published or curated by a single agent, and available for access or download in one or more representations."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcat:Dataset ;
+  sh:path dcat:Dataset ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Dataset" .
+
+psdiDcatShacl:DataServicePropertyShape a sh:PropertyShape ;
+  sh:name "Data Service" ;
+  sh:description "A collection of operations that provides access to one or more datasets or data processing functions."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcat:DataService ;
+  sh:path dcat:DataService ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Data_Service" .
+
+psdiDcatShacl:ToolPropertyShape a sh:PropertyShape ;
+  sh:name "Tool" ;
+  sh:description "A tool is software* - downloaded from the PSDI platform and run via one's own non-PSDI infrastructure - that facilitates access to or performs data processing functions on data (available through the PSDI platform or other data). *'Software' - 'Computer programs, procedures, and possibly associated documentation and data pertaining to the operation of a computer System.' [IEEE Standard Computer Dictionary, 1991, https://doi.org/10.1109/IEEESTD.1991.106963]"@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class psdiDcatExt:Tool ;
+  sh:path psdiDcatExt:Tool ;
+  rdfs:seeAlso "https://metadata.psdi.ac.uk/psdi-dcat-ext#Tool" .
+
+psdiDcatShacl:GuidancePropertyShape a sh:PropertyShape ;
+  sh:name "Guidance" ;
+  sh:description "Advice/information made available to PSDI users and contributors via the PSDI platform to provide guidance* about PSDI, its resources and data management and reproducibility principals."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class psdiDcatExt:Guidance ;
+  sh:path psdiDcatExt:Guidance ;
+  rdfs:seeAlso "https://metadata.psdi.ac.uk/psdi-dcat-ext#Tool" .
+
+################################# Dataset PropertyShapes ############################################
+
+psdiDcatShacl:AccrualPeriodicityPropertyShape a sh:PropertyShape ;
+  sh:name "Accrual Periodicity" ;
+  sh:description "The frequency at which a dataset is published. The value of dcterms:accrualPeriodicity gives the rate at which the dataset-as-a-whole is updated. This may be complemented by dcat:temporalResolution to give the time between collected data points in a time series. Use enumerated values from http://purl.org/cld/freq/ - note that this doesn't resolve currently, but values are in http://dublincore.org/specifications/dublin-core/collection-description/frequency/freq.rdf"@en ;
+  sh:path dcterms:accrualPeriodicity ;
+  sh:nodeKind sh:IRI ;
+  sh:in ( <http://purl.org/cld/freq/triennial>
+    <http://purl.org/cld/freq/biennial>
+    <http://purl.org/cld/freq/annual>
+    <http://purl.org/cld/freq/semiannual>
+    <http://purl.org/cld/freq/threeTimesAYear>
+    <http://purl.org/cld/freq/quarterly>
+    <http://purl.org/cld/freq/bimonthly>
+    <http://purl.org/cld/freq/monthly>
+    <http://purl.org/cld/freq/semimonthly>
+    <http://purl.org/cld/freq/biweekly>
+    <http://purl.org/cld/freq/threeTimesAMonth>
+    <http://purl.org/cld/freq/weekly>
+    <http://purl.org/cld/freq/semiweekly>
+    <http://purl.org/cld/freq/threeTimesAWeek>
+    <http://purl.org/cld/freq/daily>
+    <http://purl.org/cld/freq/continuous>
+    <http://purl.org/cld/freq/irregular>
+  );
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:dataset_frequency" .
+
+psdiDcatShacl:DistributionPropertyShape a sh:PropertyShape ;
+  sh:name "Distribution" ;
+  sh:description "A specific representation of a dataset. A dataset might be available in multiple serializations that may differ in various ways, including natural language, media-type or format, schematic organization, temporal and spatial resolution, level of detail or profiles (which might specify any or all of the above)."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcat:Distribution ;
+  sh:path dcat:Distribution ;
+  sh:minCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Class:Distribution" .
+
+################################# DataService PropertyShapes ############################################
+
+psdiDcatShacl:EndPointDescriptionPropertyShape a sh:PropertyShape ;
+  sh:name "EndPoint Description" ;
+  sh:description "A description of the services available via the end-points, including their operations, parameters etc. The endpoint description gives specific details of the actual endpoint instances, while dcterms:conformsTo is used to indicate the general standard or specification that the endpoints implement. An endpoint description may be expressed in a machine-readable form, such as an OpenAPI (Swagger) description [OpenAPI], an OGC GetCapabilities response [WFS], [ISO-19142], [WMS], [ISO-19128], a SPARQL Service Description [SPARQL11-SERVICE-DESCRIPTION], an [OpenSearch] or [WSDL20] document, a Hydra API description [HYDRA], else in text or some other informal mode if a formal representation is not possible. This should be a url to a webpage with a formal description of the service."@en ;
+  sh:class rdfs:Resource ;
+  sh:path dcat:endpointDescription ;
+  sh:nodeKind sh:IRI ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:data_service_endpoint_description" .
+
+psdiDcatShacl:EndPointUrlPropertyShape a sh:PropertyShape ;
+  sh:name "EndPoint URL" ;
+  sh:description "The root location or primary endpoint of the service (a Web-resolvable IRI). Should only be populated for a webservice with an endpoint URL. If not then use the landingPage property."@en ;
+  sh:path dcat:endpointURL ;
+  sh:class rdfs:Resource ;
+  sh:nodeKind sh:IRI ;
+  sh:minCount 1;
+  sh:maxCount 1;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:data_service_endpoint_url" .
+
+psdiDcatShacl:ServesDatasetPropertyShape a sh:PropertyShape ;
+  sh:name "ServesDataset" ;
+  sh:description "A collection of data that this data service can distribute. Should contain the @id of the dcat:Dataset that is served by this dataservice."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:path dcat:servesDataset ;
+  sh:pattern "^(http:\\/\\/metadata.psdi.ac.uk\\/psdi-dcat\\/|psdiDcat:)(data|resource-theme)\\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|optimade(.*))$" ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:data_service_serves_dataset" .
+
+################################# Tool PropertyShapes ############################################
+
+psdiDcatShacl:DcatExtDownloadURLPropertyShape a sh:PropertyShape ;
+  sh:class rdfs:Resource ;
+  sh:name "Download Url" ;
+  sh:path psdiDcatExt:downloadURL ;
+  sh:nodeKind sh:IRI ;
+  sh:description "The URL of the downloadable file(s) for the tool in a given format."@en ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#downloadURL" .
+
+psdiDcatShacl:DcatExtRepositoryURLPropertyShape a sh:PropertyShape ;
+  sh:class rdfs:Resource ;
+  sh:name "Repository URL" ;
+  sh:path psdiDcatExt:repositoryURL ;
+  sh:nodeKind sh:IRI ;
+  sh:minCount 1 ;
+  sh:description "The URL of the repository which contains the code for the tool."@en ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#repositoryURL" .
+
+psdiDcatShacl:DcatExtInstallCommandPropertyShape a sh:PropertyShape ;
+  sh:name "Install Command" ;
+  sh:description "Command(s) to install tool if simple installation."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path psdiDcatExt:installCommand ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#installCommand" .
+
+psdiDcatShacl:DcatExtProgrammingLanguagePropertyShape a sh:PropertyShape ;
+  sh:name "Programming Language" ;
+  sh:description "A language in which source code is written that is intended to be executed/run by a software interpreter. Programming languages are ways to write instructions that specify what to do, and sometimes, how to do it. Where possible Version should be specified too. Takes values from 'Programming Language' classifiers in http://pypi.org/classifiers where possible. e.g. 'Programming Language :: Python :: 3.14'. Multiple values are allowed."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path psdiDcatExt:programmingLanguage ;
+  sh:pattern "^Programming Language :: (.*)$" ;
+  sh:datatype xsd:string ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#programmingLanguage" .
+
+psdiDcatShacl:DcatExtDeliveryFormatPropertyShape a sh:PropertyShape ;
+  sh:name "Delivery Format" ;
+  sh:description "The file format if the tool is available as a single file or package or distribution for download and installation. The format SHOULD be expressed using a media type as defined by IANA media types registry http://www.iana.org/assignments/media-types/media-types.xhtml, if available. The media type for docker container image should have label 'application/vnd.docker.distribution.manifest.v2+json' (this is not currently in IANA)."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcterms:MediaType ;
+  sh:path psdiDcatExt:deliveryFormat ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#deliveryFormat" .
+
+psdiDcatShacl:DcatExtDevelopmentStatusPropertyShape a sh:PropertyShape ;
+  sh:name "Development Status" ;
+  sh:description "Development status is an information content entity which indicates the maturity of a software entity within the context of the software life cycle. Takes values from 'Development Status' classifiers in http://pypi.org/classifiers where possible e.g. 'Development Status :: 5 - Production/Stable'"@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path psdiDcatExt:developmentStatus ;
+  sh:pattern "^Development Status :: (.*)$" ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#developmentStatus" .
+
+psdiDcatShacl:DcatExtByteSizePropertyShape a sh:PropertyShape ;
+  sh:name "Byte Size" ;
+  sh:path psdiDcatExt:byteSize ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:nonNegativeInteger ;
+  sh:maxCount 1 ;
+  sh:description "The size in bytes can be approximated (as a non-negative integer) when the precise size is not known."@en ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#byteSize" .
+
+psdiDcatShacl:DcatExtExampleDataPropertyShape a sh:PropertyShape ;
+  sh:name "Example Data" ;
+  sh:nodeKind sh:IRI ;
+  sh:description "An input dataset for this tool. This should be expressed as the @id of an appropriate DCAT dataset."@en ;
+  sh:path psdiDcatExt:exampleData ;
+  sh:pattern "^(http:\\/\\/metadata.psdi.ac.uk\\/psdi-dcat\\/|psdiDcat:)data\\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|optimade(.*))$" ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#exampleData" .
+
+psdiDcatShacl:DcatExtOperatingSystemPropertyShape a sh:PropertyShape ;
+  sh:name "Operating System" ;
+  sh:description "Optional property - if tool is specific to particular operating systems please indicate them here. Version numbers should be included where needed. Takes values from 'Operating System' classifiers in http://pypi.org/classifiers where possible (e.g. 'Operating System :: Windows :: Wi11, Android'). Multiple values are allowed."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path psdiDcatExt:operatingSystem ;
+  sh:pattern "^Operating System :: (.*)$" ;
+  sh:datatype xsd:string ;
+  rdfs:seeAlso "http://metadata.psdi.ac.uk/dcatExt#operatingSystem" .
+
+psdiDcatShacl:CheckSumPropertyShape a sh:PropertyShape ;
+  sh:name "Check Sum" ;
+  sh:description "The checksum property provides a mechanism that can be used to verify that the contents of a file or package have not changed [SPDX]. The checksum is related to the download URL. Only use if database is downloadable as a single file. Should be specified with the algorithm that generates it."@en ;
+  sh:path spdx:checkSum ;
+  sh:class spdx:checkSum ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_checksum" .
+
+################################# Distribution PropertyShapes ############################################
+
+psdiDcatShacl:DownloadURLPropertyShape a sh:PropertyShape ;
+  sh:name "Download Url" ;
+  sh:description "The URL of the downloadable file in a given format. E.g., CSV file or RDF file. The format is indicated by the distribution's dcterms:format and/or dcat:mediaType. dcat:downloadURL SHOULD be used for the URL at which this distribution is available directly, typically through a HTTP Get request. If data distribution is accessible (1) for the whole dataset to be downloaded as a direct link as a whole then use dcat:downloadURL:, (2) as a service, accessible via a direct url then use accessURL; (3) as a service or download from a landing page which governs access then use dcat:landingPage or (4) use accessService if it corresponds to a service that is described as a dcat:DataService (with an endpoint Url)"@en ;
+  sh:class rdfs:Resource ;
+  sh:path dcat:downloadURL ;
+  sh:nodeKind sh:IRI;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_download_url" .
+
+psdiDcatShacl:AccessURLPropertyShape a sh:PropertyShape ;
+  sh:name "Access Url" ;
+  sh:description "A URL of the resource that gives access to a distribution of the dataset. E.g., landing page, feed, SPARQL endpoint. dcat:accessURL SHOULD be used for the URL of a service or location that can provide access to this distribution, typically through a Web form, query or API call. dcat:downloadURL is preferred for direct links to downloadable resources. If the distribution(s) are accessible only through a landing page (i.e., direct download URLs are not known), then the landing page URL associated with the dcat:Dataset SHOULD be duplicated as access URL on a distribution (see 5.7 Dataset available only behind some Web page). If data distribution is accessible (1) for the whole dataset to be downloaded as a direct link as a whole then use dcat:downloadURL:, (2) as a service, accessible via a direct url then use accessURL; (3) as a service or download from a landing page which governs access then use dcat:landingPage or (4) use accessService if it corresponds to a service that is described as a dcat:DataService (with an endpoint Url)"@en ;
+  sh:class rdfs:Resource ;
+  sh:path dcat:accessURL ;
+  sh:nodeKind sh:IRI;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_access_url" .
+
+psdiDcatShacl:AccessServicePropertyShape a sh:PropertyShape ;
+  sh:description "A data service that gives access to the distribution of the dataset. dcat:accessService SHOULD be used to link to a description of a dcat:DataService that can provide access to this distribution. If data distribution is accessible (1) for the whole dataset to be downloaded as a direct link as a whole then use dcat:downloadURL:, (2) as a service, accessible via a direct url then use accessURL; (3) as a service or download from a landing page which governs access then use dcat:landingPage or (4) use accessService if it corresponds to a service that is described as a dcat:DataService (with an endpoint Url) - in this case accessService should contain its @id"@en ;
+  sh:name "Access Service" ;
+  sh:nodeKind sh:IRI ;
+  sh:path dcat:accessService ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_access_service" .
+
+psdiDcatShacl:ByteSizePropertyShape a sh:PropertyShape ;
+  sh:name "Byte Size" ;
+  sh:description "The size of a distribution in bytes. The size in bytes can be approximated (as a non-negative integer) when the precise size is not known. rdfs:Literal typically typed as xsd:nonNegativeInteger. Not mandatory for PSDI."@en ;
+  sh:path dcat:byteSize ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:nonNegativeInteger ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_size" .
+
+psdiDcatShacl:CompressFormatPropertyShape a sh:PropertyShape ;
+  sh:name "Compress Format" ;
+  sh:description "The compression format of the distribution in which the data is contained in a compressed form, e.g., to reduce the size of the downloadable file. This property to be used when the files in the distribution are compressed, e.g., in a ZIP file. The format SHOULD be expressed using a media type as defined by IANA [IANA-MEDIA-TYPES], if available. Only fill in if whole database is available for download in compressed format from downloadURL. Use enumerated value from http://www.iana.org/assignments/media-types/media-types.xhtml e.g. http://www.iana.org/assignments/media-types/application/gzip"@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcterms:MediaType ;
+  sh:path dcat:compressFormat ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_compression_format" .
+
+psdiDcatShacl:PackageFormatPropertyShape a sh:PropertyShape ;
+  sh:name "Package Format" ;
+  sh:description "The package format of the distribution in which one or more data files are grouped together, e.g., to enable a set of related files to be downloaded together. This property to be used when the files in the distribution are packaged, e.g., in a TAR file, a ZIP file, a Frictionless Data Package or a Bagit file. The format SHOULD be expressed using a media type as defined by IANA [IANA-MEDIA-TYPES], if available. Only use this property if data is grouped together into package in this distribution. Use enumerated value from http://www.iana.org/assignments/media-types/media-types.xhtml e.g. http://www.iana.org/assignments/media-types/application/gzip"@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcterms:MediaType ;
+  sh:path dcat:packageFormat ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_packaging_format" .
+
+psdiDcatShacl:MediaTypePropertyShape a sh:PropertyShape ;
+  sh:name "Media Type" ;
+  sh:description "The media type of the distribution as defined by IANA [IANA-MEDIA-TYPES]. This property SHOULD be used when the media type of the distribution is defined in IANA [IANA-MEDIA-TYPES], otherwise dcterms:format MAY be used with different values. Use enumerated value from http://www.iana.org/assignments/media-types/media-types.xhtml e.g. http://www.iana.org/assignments/media-types/application/sql"@en ;
+  sh:nodeKind sh:IRI ;
+  sh:class dcterms:MediaType ;
+  sh:path dcat:mediaType ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:distribution_media_type" .
+
+############################# NodeShapes #############################
+
+psdiDcatShacl:VCardNodeShape a sh:NodeShape ;
+  sh:name "VCard Kind" ;
+  sh:description "Object representing a group of persons or entities.  A group object will usually contain hasMember properties to specify the members of the group."@en ;
+  sh:targetClass vcard:Kind ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:HasEmailPropertyShape ;
+  sh:property psdiDcatShacl:HasURLPropertyShape ;
+  rdfs:seeAlso "https://www.w3.org/2006/vcard/ns" .
+
+psdiDcatShacl:FoafDocumentNodeShape a sh:NodeShape ;
+  sh:name "FOAF Document" ;
+  sh:description "A document"@en ;
+  sh:targetClass foaf:Document ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:nodeKind sh:IRI ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:LabelPropertyShape ;
+  rdfs:seeAlso "http://xmlns.com/foaf/spec/#term_Document" .
+
+psdiDcatShacl:SKOSConceptNodeShape a sh:NodeShape ;
+  sh:name "SKOS Concept" ;
+  sh:description "Concept"@en ;
+  sh:targetClass skos:Concept ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+  sh:nodeKind sh:IRI ;
+  sh:property psdiDcatShacl:PrefLabelPropertyShape ;
+  rdfs:seeAlso "https://www.w3.org/2009/08/skos-reference/skos.html#Concept" .
+
+psdiDcatShacl:AccessRightsNodeShape a sh:NodeShape ;
+  sh:name "Access Rights" ;
+  sh:description "A statement about the intellectual property rights (IPR) held in or over a resource, a legal document giving official permission to do something with a resource, or a statement about access rights."@en ;
+  sh:targetClass dcterms:RightsStatement ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+  sh:nodeKind sh:IRI ;
+  sh:property psdiDcatShacl:LabelPropertyShape ;
+  rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/terms/RightsStatement/" .
+
+psdiDcatShacl:StandardNodeShape a sh:NodeShape ;
+  sh:name "Standard" ;
+  sh:description "A reference point against which other things can be evaluated or compared."@en ;
+  sh:targetClass dcterms:Standard ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:nodeKind sh:IRI ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:LabelPropertyShape ;
+  rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#http://purl.org/dc/terms/Standard" .
+
+psdiDcatShacl:FoafAgentTargetClassShape a sh:NodeShape ;
+  sh:name "Foaf Agent" ;
+  sh:description "An agent (eg. person, group, software or physical artifact)."@en ;
+  sh:targetClass foaf:Agent ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:nodeKind sh:IRI ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:NamePropertyShape ;
+  rdfs:seeAlso "http://xmlns.com/foaf/spec/#term_Agent" .
+
+psdiDcatShacl:LinguisticSystemNodeShape a sh:NodeShape ;
+  sh:name "Linguistic system" ;
+  sh:description "A system of signs, symbols, sounds, gestures, or rules used in communication."@en ;
+  sh:targetClass dcterms:LinguisticSystem ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:nodeKind sh:IRI ;
+  sh:pattern "^http(s)?://id.loc.gov/vocabulary/iso639-1/(.*)$" ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:LabelPropertyShape ;
+  rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/terms/LinguisticSystem/" .
+
+psdiDcatShacl:ConceptNodeShape a sh:NodeShape ;
+  sh:name "Theme taxomony" ;
+  sh:description "A knowledge organization system (KOS) used to classify the resources documented in the catalog (e.g., datasets and services)."@en ;
+  sh:targetClass skos:ConceptScheme ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:nodeKind sh:IRI ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:LabelPropertyShape ;
+  sh:property psdiDcatShacl:TitlePropertyShape ;
+  rdfs:seeAlso "https://www.w3.org/ns/dcat#themeTaxonomy" .
+
+psdiDcatShacl:MediaTypeNodeShape a sh:NodeShape ;
+  sh:name "Media Type" ;
+  sh:description "A file format or physical medium. The format SHOULD be expressed using a media type as defined by IANA media types registry http://www.iana.org/assignments/media-types/media-types.xhtml, if available."@en ;
+  sh:targetClass dcterms:MediaType ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:nodeKind sh:IRI ;
+  sh:closed true ;
+  sh:pattern "^http(s)?://www.iana.org/assignments/media-types/application/(.*)$" ;
+  sh:property psdiDcatShacl:LabelPropertyShape ;
+  rdfs:seeAlso "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/terms/MediaType/" .
+
+psdiDcatShacl:CheckSumTargetClassShape a sh:NodeShape ;
+  sh:name "Check Sum" ;
+  sh:description "The checksum property provides a mechanism that can be used to verify that the contents of a file or package have not changed [SPDX]. The checksum is related to the download URL. Only use if database is downloadable as a single file. Should be specified with the algorithm that generates it."@en ;
+  sh:targetClass spdx:checkSum ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:CheckSumAlgorithmPropertyShape ;
+  sh:property psdiDcatShacl:CheckSumValuePropertyShape ;
+  rdfs:seeAlso "http://spdx.org/rdf/terms#Checksum" .
+
+psdiDcatShacl:AttributionTargetClassShape a sh:NodeShape ;
+  sh:name "Attribution" ;
+  sh:description "Attribution is the ascribing of an entity to an agent. When an entity e is attributed to agent ag, entity e was generated by some unspecified activity that in turn was associated to agent ag. Thus, this relation is useful when the activity is not known, or irrelevant."@en ;
+  sh:targetClass prov:Attribution ;
+  sh:ignoredProperties ( rdf:type ) ;
+  sh:closed true ;
+  sh:property psdiDcatShacl:AgentPropertyShape ;
+  sh:property psdiDcatShacl:HadRolePropertyShape ;
+  rdfs:seeAlso "https://www.w3.org/TR/prov-o/#Attribution" .
+
+################################# Other PropertyShapes ############################################
+
+psdiDcatShacl:HasEmailPropertyShape a sh:PropertyShape ;
+  sh:name "Has Email" ;
+  sh:description "To specify the electronic mail address for communication with the object."@en ;
+  sh:pattern "^[^@]+@[^@]+$" ;
+  sh:nodeKind sh:Literal ;
+  sh:path vcard:hasEmail ;
+  sh:datatype xsd:string ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://www.w3.org/2006/vcard/ns#hasEmail" .
+
+psdiDcatShacl:HasURLPropertyShape a sh:PropertyShape ;
+  sh:name "Has URL" ;
+  sh:description "To specify a uniform resource locator associated with the object."@en ;
+  sh:nodeKind sh:IRI ;
+  sh:path vcard:hasURL ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://www.w3.org/2006/vcard/ns#hasURL" .
+
+psdiDcatShacl:ValuePropertyShape a sh:PropertyShape ;
+  sh:name "Value" ;
+  sh:description "rdf:value is an instance of rdf:Property that may be used in describing structured values."@en ;
+  sh:path rdf:value ;
+  sh:nodeKind sh:Literal ;
+  rdfs:seeAlso "https://www.w3.org/TR/rdf-schema/#ch_value" .
+
+psdiDcatShacl:PrefLabelPropertyShape a sh:PropertyShape ;
+  sh:name "SkosPrefLabel" ;
+  sh:description "preferred label"@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path skos:prefLabel ;
+  sh:datatype xsd:string ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/skos-reference/#prefLabel" .
+
+psdiDcatShacl:AgentPropertyShape a sh:PropertyShape ;
+  sh:name "Agent" ;
+  sh:description "An agent is something that bears some form of responsibility for an activity taking place, for the existence of an entity, or for another agent's activity."@en ;
+  sh:path prov:agent ;
+  sh:class foaf:Agent ;
+  sh:nodeKind sh:IRI ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/prov-o/#Agent" .
+
+psdiDcatShacl:HadRolePropertyShape a sh:PropertyShape ;
+  sh:name "QualifiedAttributionRole" ;
+  sh:description "The function of an entity or agent with respect to another entity or resource. May be used in a qualified-attribution to specify the role of an Agent with respect to an Entity. It is recommended that the value be taken from a controlled vocabulary of agent roles, such as [ISO-19115] CI_RoleCode. Values should be chosen from the list specified at: http://standards.iso.org/iso/19115/resources/Codelists/gml/CI_RoleCode.xml"@en ;
+  sh:class rdfs:Resource ;
+  sh:nodeKind sh:IRI ;
+  sh:path dcat:hadRole ;
+  sh:in ( <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_resourceProvider>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_custodian>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_owner>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_user>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_distributor>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_originator>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_pointOfContact>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_principalInvestigator>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_processor>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_publisher>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_author>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_sponsor>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_coAuthor>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_collaborator>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_editor>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_mediator>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_rightsHolder>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_contributor>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_funder>
+    <https://schemas.isotc211.org/Resources/codelists.xml#ISO19115-1.1.cit.CI_RoleCode_stakeholder>
+  ) ;
+  sh:minCount 1 ;
+  rdfs:seeAlso "https://www.w3.org/TR/vocab-dcat-3/#Property:relationship_hadRole" .
+
+psdiDcatShacl:CheckSumAlgorithmPropertyShape a sh:PropertyShape ;
+  sh:name "CheckSum algorithm";
+  sh:description "Identifies the algorithm used to produce the subject Checksum. Currently, SHA-1 is the only supported algorithm. It is anticipated that other algorithms will be supported at a later time."@en;
+  sh:path spdx:algorithm ;
+  sh:class spdx:ChecksumAlgorithm ;
+  sh:nodeKind sh:IRI ;
+  sh:in ( spdx:d4e4247 ) ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://spdx.org/rdf/terms#algorithm" .
+
+psdiDcatShacl:CheckSumValuePropertyShape a sh:PropertyShape ;
+  sh:name "CheckSum Value";
+  sh:description "The checksumValue property provides a lower case hexidecimal encoded digest value produced using a specific algorithm."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:datatype xsd:hexBinary ;
+  sh:path spdx:checksumValue ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://spdx.org/rdf/terms#checksumValue" .
+
+psdiDcatShacl:NamePropertyShape a sh:PropertyShape ;
+  sh:name "Name";
+  sh:description "The name of something is a simple textual string."@en ;
+  sh:nodeKind sh:Literal ;
+  sh:path foaf:name ;
+  sh:datatype xsd:string ;
+  sh:minCount 1 ;
+  sh:maxCount 1 ;
+  rdfs:seeAlso "http://xmlns.com/foaf/spec/#term_name" .

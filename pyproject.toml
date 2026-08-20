@@ -47,23 +47,71 @@ dependencies = []
 # rdflib at 1,495,780 against owlready2's 892,228, and rdflib needs no JVM.
 graph = ["rdflib>=7.0"]
 
-# `mlcroissant` is a COMMAND, not an import. It validates what we emit; we never
-# call its API. Declaring it as a runtime dependency would pull a large tree
-# into every install to support a check that only developers run.
+# ─── PSDI ────────────────────────────────────────────────────────────────────
+# `pyshacl` WAS refused with the note "if PSDI conformance is adopted, this
+# comes back WITH the emitter, not before". It has been adopted, so here it is
+# with `claimcheck/psdi.py`, and the reason is worth more than the note it
+# replaces:
 #
-# NOT PRESENT, each for a measured reason:
-#   rocrate, roc-validator — RO-Crate is a second description of the same
-#       dataset. Croissant is the format this community reads, and a survey of
-#       227 packages found five workflow engines already emitting Workflow Run
-#       Crate with `runcrate` validating it. Emitting a third copy is work.
-#   pyshacl — needed only to validate DCAT against PSDI's shapes. If PSDI
-#       conformance is adopted, this comes back WITH the emitter, not before.
-#   linkml — generated a vocabulary this package does not have.
+#   PSDI is the ONLY external format here whose conformance is checkable
+#   against shapes its own maintainers wrote.
+#
+# Everything else this package emits is checked by a validator we chose. What
+# it costs is `pyshacl` plus 68 kB of vendored SHACL pinned to an upstream
+# commit (`claimcheck/resources/psdi/`), which is a real cost and is why it is
+# an extra rather than a dependency. What it buys, measured: plain DCAT scores
+# 25 violations against those shapes, of which nine are `sh:closed` — so
+# "conformant" and "looks conformant" are 25 findings apart, and nothing short
+# of their own shapes could have told them apart.
+psdi = ["rdflib>=7.0", "pyshacl>=0.25"]
+
+# ─── RO-Crate ────────────────────────────────────────────────────────────────
+# `rocrate` and `roc-validator` WERE refused as "a second description of the
+# same dataset", on the measured ground that five workflow engines already emit
+# Workflow Run Crate with `runcrate` validating it. That reason was about
+# WORKFLOW RUN crates and it still holds — `claimcheck/rocrate.py` describes the
+# project's FILES, which is the deposit format, not a second run record. The
+# rule "if Snakemake already does it, do not build it again" is untouched: the
+# crate carries no timings, no shell command and no environment.
+#
+# Both are imports, not commands, and both are needed. `rocrate` builds the
+# document — the alternative is hand-assembling JSON-LD, which is how a digest
+# came to be published under a key RO-Crate 1.1's context does not define, so
+# every conformant processor dropped it. `roc-validator` (CRS4, Apache-2.0)
+# checks it: the claim that "no production validator for RO-Crate exists" was
+# put in six files here on the evidence of one dead repository, and was false.
+rocrate = ["rocrate>=0.13", "roc-validator>=0.11"]
+
+# ─── conformance ─────────────────────────────────────────────────────────────
+# `mlcroissant` is a COMMAND for `dev` — it validates what we emit and nothing
+# imports it there. `claimcheck/conform.py` is the exception and it is a
+# deliberate one: its whole subject is that VALIDATING IS NOT READING, and
+# `mlcroissant validate` has no way to say whether a consumer gets any rows.
+# Answering that needs `mlc.Dataset(...).records()`, which is the API. The
+# measured case is this package's own Croissant on 2026-08-17: validated
+# cleanly, yielded zero records.
+conform = ["mlcroissant>=1.1", "rdflib>=7.0", "pyshacl>=0.25",
+           "rocrate>=0.13", "roc-validator>=0.11"]
+
+# `snakemake` is a COMMAND, not an import. It runs the workflow; we never call
+# its API. Declaring it as a runtime dependency would pull a large tree into
+# every install to support something only developers and workflow authors run.
+#
+# STILL NOT PRESENT:
+#   linkml — generated the vocabulary that `claimcheck/vocabulary.py` now
+#       carries. It is a BUILD-TIME generator, so taking the generated file
+#       would have meant shipping a schema, a generator script and a check
+#       that the committed output still reproduces — three moving parts for
+#       27 constants. The vocabulary is hand-written instead, with the
+#       reasons in the file rather than in a schema nobody opens.
 dev = [
   "pytest>=8",
   "mlcroissant>=1.1",
   "snakemake>=9",
   "rdflib>=7.0",
+  "pyshacl>=0.25",
+  "rocrate>=0.13",
+  "roc-validator>=0.11",
 ]
 
 # A THIRD PARTY CAN ADD AN OUTPUT FORMAT WITHOUT FORKING THIS. Ship a package
@@ -83,8 +131,8 @@ packages = ["claimcheck"]
 #
 # In the predecessor they were a pre-commit hook, which is opt-in — it does not
 # run for `--no-verify`, for a merge in the web UI, or for anyone who never read
-# the README. `tests/test_style.py` runs both, so `pytest` is the whole gate and
-# there is nothing to remember.
+# the README. `tests/test_style.py` runs both, so `pytest` runs every check
+# there is and there is nothing to remember.
 #
 # The selection is narrow by measurement, carried over from the predecessor
 # where ruff's defaults produced 253 findings against a deliberate house style

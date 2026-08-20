@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,9 +23,21 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def _run(tool: str, *args: str) -> subprocess.CompletedProcess:
-    if shutil.which(tool) is None:
-        pytest.skip(f"{tool} is not installed")
-    return subprocess.run([tool, *args], capture_output=True, text=True,
+    """Run a lint tool, preferring the one beside this interpreter.
+
+    `shutil.which` alone was the whole guard, and it made this file skip with
+    "ruff is not installed" while ruff sat in the same environment as the
+    running interpreter -- pytest invoked through an absolute path does not put
+    that environment's `bin/` on PATH. Two real findings hid behind that skip
+    until 2026-08-17. Same false-skip shape as `tests/_snakemake.py`, which was
+    written for the identical failure with snakemake, so the fix is the same:
+    ask the question that is meant, and skip only when the answer is really no.
+    """
+    exe = shutil.which(tool) or str(Path(sys.executable).parent / tool)
+    if not Path(exe).is_file():
+        pytest.skip(f"{tool} is neither on PATH nor beside {sys.executable} — "
+                    f"the only case in which this may be skipped")
+    return subprocess.run([exe, *args], capture_output=True, text=True,
                           cwd=str(REPO))
 
 

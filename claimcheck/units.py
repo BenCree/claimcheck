@@ -32,9 +32,10 @@ declaration, written explicitly.
 a change of quantity — per particle to per mole — and not a conversion. Doing it
 silently is exactly the confusion above.
 
-Ported from `provchem/declare/units.py`, 2026-08-17. See
-`archive/PORTING_LOG.md` in the al_mace repository for why that package is being
-retired and what else is owed.
+Ported 2026-08-17 from a predecessor package that has since been retired
+and archived. What survived the port is what could not be got from
+Snakemake, `mlcroissant` or `rdflib`; everything else was dropped rather
+than carried.
 """
 
 from __future__ import annotations

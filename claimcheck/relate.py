@@ -43,9 +43,12 @@ from claimcheck.datasets import load as load_dataset
 #: which is a different fact from the claim being wrong. Folding them together
 #: is how a column of "could not run" becomes a clean bill of health.
 AGREES, REFUTED, UNVERIFIABLE = "agrees", "refuted", "unverifiable"
-_STATUS = {AGREES: "measured", REFUTED: "falsified", UNVERIFIABLE: "untested"}
+#: verdict -> the belief status it carries. PUBLIC because a second
+#: module now adjudicates with these three words (`claimcheck.jobs`), and
+#: a private copy of the mapping is how two answers to one question begin.
+STATUS = {AGREES: "measured", REFUTED: "falsified", UNVERIFIABLE: "untested"}
 
-#: Enough that the percentile endpoints are stable to ~2 decimal places, and
+#: Enough that the percentile bounds are stable to ~2 decimal places, and
 #: cheap enough to run on every build. Fixed seed: an interval that moves
 #: between two runs of the same data is not a measurement.
 N_BOOT, SEED = 2000, 20260815
@@ -250,7 +253,7 @@ def check(root: Path | str) -> dict:
         # and the next person to hoist this out of the loop gets no warning.
         # Same defect ruff caught in `emit/rdf.py`; second occurrence.
         def verdict(v: str, why: str, base: dict = row, **extra) -> dict:
-            return base | {"verdict": v, "why": why, "status": _STATUS[v],
+            return base | {"verdict": v, "why": why, "status": STATUS[v],
                            **extra}
 
         # THE DECLARED METHOD IS THE ONE THAT RUNS, or the run stops.

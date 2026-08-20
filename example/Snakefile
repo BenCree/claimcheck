@@ -23,6 +23,7 @@ PY = sys.executable
 rule all:
     input:
         "results/croissant.json",
+        "results/belief.json",
         "results/graph.ttl",
         "results/dcat.ttl",
 
@@ -38,6 +39,21 @@ rule check_claims:
         py=PY,
     shell:
         "{params.py} -m claimcheck.relate . {output}"
+
+
+# WHAT ELSE IS IN DOUBT once `check_claims` has refuted something. Needs the
+# verdicts, so it consumes them: a belief whose status was recomputed cannot be
+# reported from the declaration alone.
+rule belief:
+    input:
+        claims="results/claims.json",
+        context="context.toml",
+    output:
+        "results/belief.json",
+    params:
+        py=PY,
+    shell:
+        "{params.py} -m claimcheck.belief . {output}"
 
 
 rule croissant:

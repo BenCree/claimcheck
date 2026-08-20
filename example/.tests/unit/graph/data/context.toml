@@ -101,3 +101,108 @@ claimed = 0.0
 source = "the assumption the triage rests on: the energy measures interaction, not size"
 locator = "example/context.toml#relationship-2"
 extracted_by = "human"
+
+# ── WHAT RESTS ON WHAT ───────────────────────────────────────────────────────
+# The relationships above are checked one at a time. This is the part that says
+# how they are connected, so that a refutation is news about more than the row
+# it lands on.
+#
+#   python -m claimcheck.belief .          # what is now in doubt, and why
+#
+# A claim here is `subject --predicate--> object` with a status. `tested_by`
+# names one of the relationships above, and then the RECOMPUTED verdict sets
+# the status — `agrees` -> measured, `refuted` -> falsified, `unverifiable` ->
+# untested. Writing a status beside `tested_by` is refused: a hand-written
+# status that is about to be overwritten is still a status somebody will read.
+
+[belief.rests_on]
+# The name of something you will ask about later, and the node it rests on.
+# Here they are the two dataset ids; a rule name or an output path works the
+# same way.
+mace = "mace_e_int"
+affinity = "measured_affinity"
+
+[[belief.nodes]]
+id = "mace_e_int"
+kind = "quantity"
+label = "MACE-OFF interaction energy, evaluated on the docked pose"
+
+[[belief.nodes]]
+id = "interaction_strength"
+kind = "quantity"
+label = "The physical quantity the triage means to rank on"
+
+[[belief.nodes]]
+id = "measured_affinity"
+kind = "reference"
+label = "Binding affinity measured in the assay, as pKD"
+
+[[belief.nodes]]
+id = "docked_pose"
+kind = "representation"
+label = "The pose the energy is evaluated on"
+
+[[belief.nodes]]
+id = "crystal_pose"
+kind = "reference"
+label = "The pose the complex actually adopts"
+
+[[belief.nodes]]
+id = "vina_score"
+kind = "method"
+label = "The docking score this pipeline replaced"
+
+# THE PREMISE OF THE TRIAGE. Its prediction is relationship 1, and the data
+# agrees with it — so this claim is `measured`, and carries no caveat.
+[[belief.claims]]
+subject = "mace_e_int"
+predicate = "preserves_ordering_of"
+object = "measured_affinity"
+tested_by = "mace.e_int_kcal ~ affinity.experimental_pKD"
+
+# THE ASSUMPTION UNDERNEATH IT, and the reason the two questions are worth
+# asking. A quantity that stands in for interaction strength predicts no
+# relationship with ligand size — which is exactly what relationship 2 claims
+# and exactly what the data refutes. So this claim is `falsified`, and every
+# number from the `mace` dataset now carries it, INCLUDING the one whose own
+# check came back `agrees`.
+[[belief.claims]]
+subject = "mace_e_int"
+predicate = "approximates"
+object = "interaction_strength"
+tested_by = "mace.e_int_kcal ~ mace.n_lig_atoms"
+
+# Two hops of provenance, neither of them checked by any relationship: the
+# energy is evaluated on a pose, and the pose is a stand-in for the one the
+# complex actually adopts. The second is `assumed`, so it is both an open
+# question and a caveat, and it arrives on the `mace` dataset from two edges
+# away.
+[[belief.claims]]
+subject = "mace_e_int"
+predicate = "depends_on"
+object = "docked_pose"
+status = "by_construction"
+
+[[belief.claims]]
+subject = "docked_pose"
+predicate = "approximates"
+object = "crystal_pose"
+status = "assumed"
+
+# THE EDGE DOUBT MUST NOT CROSS, and the two-sided half of the example.
+# `supersedes` records that a replacement happened and nothing more: the
+# assumption still sitting on the score this pipeline replaced is not a caveat
+# on the numbers that replaced it. Note that the claim below is the SAME
+# predicate, against the SAME object, as the falsified one above — it is not
+# delivered, and the only difference is whose numbers it is about.
+[[belief.claims]]
+subject = "mace_e_int"
+predicate = "supersedes"
+object = "vina_score"
+status = "by_construction"
+
+[[belief.claims]]
+subject = "vina_score"
+predicate = "approximates"
+object = "interaction_strength"
+status = "assumed"

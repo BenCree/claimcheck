@@ -1,4 +1,5 @@
-"""The two modules ported from `provchem` on 2026-08-17, both sides of each.
+"""The two modules ported from a retired predecessor on 2026-08-17, both sides
+of each.
 
 `claimcheck` could already say a column was a float in kcal/mol. It could not
 say that kcal/mol and kJ/mol are the same quantity a factor apart, nor what made

@@ -37,12 +37,14 @@ than inventing a DCAT term and implying it is standard.
 
 ## What this does NOT claim
 
-**It is not validated against PSDI's profile.** PSDI publishes SHACL shapes
-that constrain DCAT much further — required identifiers under their own URL
-namespace, a logo, a display priority. Checking against them needs `pyshacl`
-and the vendored shapes, which is a decision with a cost, and it returns *with*
-that decision rather than before it. What comes out here is plain DCAT, and the
-tests check it parses and carries the terms it says it carries.
+**It is not validated against PSDI's profile, and it cannot be.** That decision
+has now been taken and it went the other way: `claimcheck/psdi.py` emits a
+*second, separate* record under PSDI's shapes and validates it with `pyshacl`.
+The two cannot be one document. All four of PSDI's node shapes are `sh:closed`,
+so `cc:claimsChecked`, `spdx:checksum` and even W3C's own `dcat:distribution`
+are rejected outright rather than ignored — measured, 25 violations for this
+module's output. Plain DCAT is what a catalogue that will take DCAT wants; PSDI
+is a small external pointer at this work, in their profile, on their terms.
 """
 
 from __future__ import annotations
@@ -144,6 +146,64 @@ def build(root: Path | str) -> Graph:
 def render(root: Path | str) -> str:
     """The emitter interface: text, so `claimcheck.emit` need not know Turtle."""
     return build(root).serialize(format="turtle")
+
+
+def readback(path: Path | str) -> tuple[list[str], int]:
+    """Can a consumer GET the distributions this record names?
+
+    Returns `(complaints, dereferenced)`. **The count is not decoration.** A
+    record whose every `downloadURL` is an absolute IRI has nothing here to
+    dereference, so an empty complaint list means "nothing was checked", not
+    "everything is fine" — and a checker reporting a pass over zero checks is
+    the failure mode this whole package is written against. The caller reports
+    UNKNOWN on a zero.
+
+    Parsing is not reading. A catalogue record that parses, carries every term
+    it promises and points at nothing is the exact shape of the Croissant defect
+    on record here: `contentUrl` written relative to the project root while the
+    consumer resolves it against the folder holding the file.
+
+    **The base is the document's own folder, and that is not arbitrary.** A
+    relative `dcat:downloadURL` declares no base of its own. Somebody who has
+    fetched this `.ttl` and nothing else holds exactly one base — where the file
+    is. If the path resolves from somewhere else and not from here, the record
+    is unresolvable to its own reader, and this says which.
+
+    Absolute IRIs are not fetched. A conformance report that depends on the
+    network says something different on a train.
+    """
+    path = Path(path)
+    here = path.parent
+    try:
+        g = Graph().parse(path, format="turtle")
+    except Exception as e:                                   # noqa: BLE001
+        return ([f"the record will not parse — {type(e).__name__}: {e}"[:200]], 0)
+
+    bad: list[str] = []
+    n = 0
+    local = 0
+    for _dist, _p, o in g.triples((None, DCAT.downloadURL, None)):
+        n += 1
+        raw = str(o)
+        if isinstance(o, URIRef) or "://" in raw:
+            continue                     # remote; not ours to dereference
+        local += 1
+        if (here / raw).is_file():
+            continue
+        # Where DOES it resolve? Naming the base that works turns "broken" into
+        # a one-line fix rather than a hunt.
+        found = next((str(b) for b in (here.parent, here.parent.parent,
+                                       Path.cwd())
+                      if (b / raw).is_file()), None)
+        bad.append(
+            f"dcat:downloadURL {raw!r} does not resolve from {here}, which is "
+            f"the only base a consumer holding this file has" +
+            (f" — it resolves from {found}, and the record does not say so"
+             if found else " — and it resolves from no nearby directory either"))
+    if not n:
+        bad.append("this record names no dcat:downloadURL, so it tells a "
+                   "consumer where nothing is")
+    return bad, local
 
 
 def main(argv: list[str] | None = None) -> int:

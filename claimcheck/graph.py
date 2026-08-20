@@ -28,6 +28,34 @@ graph are joined at the column.**
 That makes "where is this evidence from" a traversal rather than a lookup in
 somebody's memory: from a DOI and a figure number, down to a named column, in a
 named file, with the hash Snakemake recorded when it made it.
+
+## The belief layer, in EVI's verbs rather than ours
+
+A project with a `[belief]` table (`claimcheck.belief`) also gets the graph of
+what rests on what, and the edges use **`evi:supports` and
+`evi:directlyChallenges`**, not private predicates. With `claimcheck.evi`'s two
+axioms loaded — `supports` transitive, `indirectlyChallenges` the chain
+`( directlyChallenges supports )` — a reasoner derives from
+
+    verdict --directlyChallenges--> relationship --supports--> claim
+            --supports--> node --supports--> artefact
+
+everything a refutation puts in doubt, with no traversal written here. EVI
+intends `supports` to run through more than Claims: its own subproperty
+hierarchy puts `generated`, `usedBy` and `derivedTo` under `directlySupports`
+so that *"warrant can propagate through Activities and Agents"*.
+
+**A reasoner gets a subset of `belief.caveats_on`, and both are right.** Two
+things it cannot have, neither of them a bug:
+
+* **Doubt with no challenger.** An `assumed` or `untested` claim carries a
+  caveat because nobody has looked. Under open-world semantics no axiom
+  entails that, and nothing here fakes one: those claims are emitted with
+  their status and no `directlyChallenges` edge.
+* **The peer edge.** `shares_approximation_with` is symmetric and not
+  transitive, so it is not rendered as `evi:supports` — a transitive property
+  would close over it and merge every peer into one class. It is in the graph
+  as a claim; it is not in the chain.
 """
 
 from __future__ import annotations
@@ -39,8 +67,10 @@ from pathlib import Path
 
 from rdflib import Graph, Literal, Namespace, URIRef
 
+from claimcheck.belief import BeliefGraph, bearers
+from claimcheck.evi import EVI_ONTOLOGY
 from claimcheck.namespace import BASE, NS
-from rdflib.namespace import RDF, RDFS, XSD
+from rdflib.namespace import OWL, RDF, RDFS, SKOS, XSD
 
 SC = Namespace("https://schema.org/")
 CR = Namespace("http://mlcommons.org/croissant/")
@@ -57,6 +87,8 @@ def build(root: Path | str) -> Graph:
     g = Graph()
     for pfx, n in (("sc", SC), ("cr", CR), ("evi", EVI), ("tl", TL)):
         g.bind(pfx, n)
+    g.bind("owl", OWL)
+    g.bind("skos", SKOS)
 
     proj = URIRef(f"{BASE}project/{ctx['project']['name']}")
     g.add((proj, RDF.type, SC.Dataset))
@@ -102,8 +134,12 @@ def build(root: Path | str) -> Graph:
                     g.add((u, TL.inFile, node))
 
     # --- claims, evidence, verdicts ----------------------------------------
+    #: `"x ~ y"` -> the relationship's IRI, so a belief claim that names one in
+    #: `tested_by` can be joined to the recomputation that settled it.
+    by_pair: dict[str, URIRef] = {}
     for i, r in enumerate(claims["relationships"], 1):
         rel = URIRef(f"{BASE}relationship/{i}")
+        by_pair[f"{r['x']} ~ {r['y']}"] = rel
         g.add((rel, RDF.type, TL.Relationship))
         for role, ref in (("x", r["x"]), ("y", r["y"])):
             if ref in fields:
@@ -142,7 +178,73 @@ def build(root: Path | str) -> Graph:
             g.add((v, RDFS.label, Literal(f"recomputed {r['method']} from the data")))
             g.add((v, EVI.directlyChallenges, rel))
 
+    if ctx.get("belief"):
+        _belief(g, root, by_pair)
     return g
+
+
+def _belief(g: Graph, root: Path, by_pair: dict[str, URIRef]) -> None:
+    """The belief layer: nodes, claims, and the edges a reasoner walks.
+
+    Errors are NOT swallowed. A `[belief]` table that does not load is a
+    refusal a reader must see; emitting the graph without it would publish a
+    description of the project with the doubt silently left out.
+    """
+    bg = BeliefGraph.from_project(root)
+
+    # The document imports EVI, so a reasoner that resolves imports needs
+    # nothing from `claimcheck.evi` — that file is for the one that does not.
+    doc = URIRef(f"{BASE}graph")
+    g.add((doc, RDF.type, OWL.Ontology))
+    g.add((doc, OWL.imports, EVI_ONTOLOGY))
+
+    nodes = {}
+    for n in bg.nodes.values():
+        u = URIRef(f"{BASE}node/{n.id}")
+        nodes[n.id] = u
+        g.add((u, RDF.type, TL.Node))
+        g.add((u, TL.nodeKind, Literal(n.kind)))
+        g.add((u, RDFS.label, Literal(n.label or n.id)))
+
+    for i, c in enumerate(bg.claims, 1):
+        u = URIRef(f"{BASE}claim/{i}")
+        g.add((u, RDF.type, EVI.Claim))
+        g.add((u, TL.subject, nodes[c.subject]))
+        g.add((u, TL.predicate, Literal(c.predicate)))
+        g.add((u, TL.object, nodes[c.object]))
+        g.add((u, TL.status, Literal(c.status)))
+        if c.evidence:
+            g.add((u, RDFS.comment, Literal(c.evidence)))
+        # `skos:note` and NOT a second `rdfs:comment`: two comments on one
+        # subject are an unordered pair, and a consumer reading either as "the
+        # evidence" is the exact mix-up `Claim.note` exists to prevent.
+        if c.note:
+            g.add((u, SKOS.note, Literal(c.note)))
+        # A CLAIM SUPPORTS THE END WHOSE NUMBERS IT IS ABOUT, which for a
+        # directed predicate is the dependent end and only that end.
+        for b in bearers(c):
+            g.add((u, EVI.supports, nodes[b]))
+        # …and the recomputation that settled it supports it, so a `verdict`
+        # node challenging the relationship reaches the claim, the node and the
+        # artefact through one property chain.
+        if c.tested_by and c.tested_by in by_pair:
+            g.add((by_pair[c.tested_by], EVI.supports, u))
+
+    # One hop of rests-on. Peers are absent on purpose — see the module
+    # docstring and `BeliefGraph.supports_edges`.
+    for a, b in bg.supports_edges():
+        g.add((nodes[a], EVI.supports, nodes[b]))
+
+    for name, nids in sorted(bg.rests_on.items()):
+        art = URIRef(f"{BASE}artefact/{name}")
+        g.add((art, RDF.type, TL.Artefact))
+        g.add((art, SC.name, Literal(name)))
+        # ONE EDGE PER NODE. An artefact resting on four methods is supported
+        # by four, and a reasoner walking `supports` must reach all four
+        # closures — dropping three would hand it a subset of `caveats_on`
+        # that looks complete.
+        for nid in nids:
+            g.add((nodes[nid], EVI.supports, art))
 
 
 def render(root: Path | str) -> str:

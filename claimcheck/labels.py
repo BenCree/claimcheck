@@ -28,8 +28,9 @@ the threshold is not recoverable, and sweeping it is not an available analysis.
 Saying so stops someone reporting a sensitivity curve over a threshold that does
 not exist.
 
-Ported from `provchem/declare/labels.py`, 2026-08-17. See
-`archive/PORTING_LOG.md` in the al_mace repository.
+Ported 2026-08-17 from a predecessor package that has since been retired
+and archived. The reasoning is reproduced here rather than cited, because
+a citation whose target is inside a zip file is not a citation.
 """
 
 from __future__ import annotations

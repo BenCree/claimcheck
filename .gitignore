@@ -17,3 +17,6 @@ example/results/
 # corpus, not build output. Only the run directories it leaves behind are
 # transient.
 example/.tests/**/expected/.gitempty
+
+# Campaign results copied in from al_mace. Data, not source: never committed.
+results/

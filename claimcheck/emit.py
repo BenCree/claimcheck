@@ -14,11 +14,12 @@ add one and it appears in `--list` with no change here.
 
 ## An unavailable format says why
 
-`graph` and `dcat` need `rdflib`, which is an extra. Asking for one without it
-must not be an `ImportError` traceback from three frames down — `--list` marks
-it unavailable with the install command, and `emit` refuses with the same
-sentence. A missing optional dependency is a fact about the installation, not a
-crash.
+`graph` and `dcat` need `rdflib`, `psdi` needs `pyshacl` on top of it, and
+`rocrate` needs the reference implementation — all extras. Asking for one
+without it must not be an `ImportError` traceback from three frames down:
+`--list` marks it unavailable with the install command, and `emit` refuses with
+the same sentence. A missing optional dependency is a fact about the
+installation, not a crash.
 """
 
 from __future__ import annotations
@@ -33,10 +34,30 @@ from pathlib import Path
 _BUILTIN = {
     "croissant": ("claimcheck.croissant", None,
                   "MLCommons Croissant 1.1 — how to READ the dataset"),
+    "belief": ("claimcheck.belief", None,
+               "what rests on what, and what a refutation puts in doubt"),
+    "jobs": ("claimcheck.jobs", "graph",
+             "PROV-O: why a run was launched, and what would have counted"),
     "graph": ("claimcheck.graph", "graph",
               "the claims and columns as RDF, joined to the digests"),
+    "evi": ("claimcheck.evi", "graph",
+            "EVI's two propagation axioms, for a reasoner with no network"),
     "dcat": ("claimcheck.dcat", "graph",
              "W3C DCAT — how to FIND the dataset, for a catalogue"),
+    "psdi": ("claimcheck.psdi", "psdi",
+             "DCAT in PSDI's profile, checked against PSDI's own SHACL"),
+    "rocrate": ("claimcheck.rocrate", "rocrate",
+                "RO-Crate 1.1 — the whole directory, named and hashed"),
+}
+
+#: extra -> the module whose presence proves the extra is installed. Declared
+#: rather than inferred: `psdi` needs `pyshacl` AND `rdflib`, and `find_spec` on
+#: `claimcheck.psdi` would say yes on an install that has neither, because our
+#: own module is always importable.
+_EXTRA_PROBE = {
+    "graph": ("rdflib",),
+    "psdi": ("rdflib", "pyshacl"),
+    "rocrate": ("rocrate", "rocrate_validator"),
 }
 
 ENTRY_POINT_GROUP = "claimcheck.emitters"
@@ -62,8 +83,8 @@ def available() -> dict[str, str | None]:
     for name, (mod, extra, _) in _BUILTIN.items():
         try:
             ok = find_spec(mod.rsplit(".", 1)[0]) is not None
-            if extra == "graph":
-                ok = find_spec("rdflib") is not None
+            for probe in _EXTRA_PROBE.get(extra or "", ()):
+                ok = ok and find_spec(probe) is not None
         except (ImportError, ValueError):
             ok = False
         out[name] = None if ok else (

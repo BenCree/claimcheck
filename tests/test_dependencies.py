@@ -38,7 +38,7 @@ PKG = REPO / "claimcheck"
 #: Import name -> distribution name, where they differ. Kept tiny on purpose:
 #: a long map here means the dependency set has grown past what one person can
 #: hold in their head, which is the condition this whole file exists to detect.
-_DIST = {"yaml": "pyyaml"}
+_DIST = {"yaml": "pyyaml", "rocrate_validator": "roc-validator"}
 
 #: Modules that ship with Python. `sys.stdlib_module_names` is authoritative and
 #: version-correct, so no hand-maintained list can drift out of date against it.
@@ -139,9 +139,16 @@ def test_the_core_needs_nothing_but_the_standard_library():
     installs a meta-path finder that refuses every non-stdlib package and then
     checks a real dataset, so a hidden import fails the way it would fail on a
     cluster node with a bare Python.
+
+    `belief` is here for the sharpest version of that reason: the question it
+    answers -- *what else is in doubt?* -- gets asked when something has
+    already gone wrong, which is exactly when the optional extras are what is
+    missing. It is built from the verdicts computed two lines above rather than
+    from a file, because `example/results/` is gitignored and a probe that read
+    it would examine nothing on a fresh clone.
     """
     probe = f'''
-import sys
+import sys, tomllib
 ALLOWED = set(sys.stdlib_module_names) | {{"claimcheck"}}
 class Ban:
     def find_spec(self, name, path=None, target=None):
@@ -150,11 +157,16 @@ class Ban:
         return None
 sys.meta_path.insert(0, Ban())
 sys.path.insert(0, {str(REPO)!r})
-from claimcheck import croissant, relate
+from claimcheck import belief, croissant, relate
 d = relate.check({str(REPO / "example")!r})
 assert d["relationships"], "the probe checked nothing"
 c = croissant.build({str(REPO / "example")!r})
 assert c["recordSet"][0]["field"], "the probe described nothing"
+ctx = tomllib.loads(open({str(REPO / "example" / "context.toml")!r}).read())
+b = belief.BeliefGraph.from_dict(
+    ctx["belief"],
+    recomputed={{f"{{r['x']}} ~ {{r['y']}}": r for r in d["relationships"]}})
+assert b.caveats_on("mace"), "the probe doubted nothing"
 print("OK", d["verdicts"])
 '''
     r = subprocess.run([sys.executable, "-c", probe], capture_output=True,
@@ -164,23 +176,38 @@ print("OK", d["verdicts"])
 
 
 def test_only_modules_that_declare_the_extra_reach_for_it():
-    """rdflib is an EXTRA, so a module importing it outside the ones that say
-    they need it makes the core install broken in a way the stdlib probe above
-    cannot see — that probe imports only the core modules.
+    """An extra's package may be imported only by a module that declares it.
 
-    DERIVED FROM THE REGISTRY, not a filename. The first version named
-    `graph.py`, and adding `dcat.py` — a second legitimate rdflib user — made it
-    fail for being right. A rule that has to be edited every time the thing it
-    describes grows is a rule that will be edited wrongly.
+    Importing one anywhere else makes the core install broken in a way the
+    stdlib probe above cannot see — that probe imports only the core modules.
+
+    DERIVED FROM THE REGISTRY, not a filename, and not from one hardcoded
+    package either. The first version named `graph.py`, and adding `dcat.py` — a
+    second legitimate rdflib user — made it fail for being right; the second
+    version asked only about `extra == "graph"`, and `psdi.py`, whose extra
+    requires rdflib *and* pyshacl, made it fail for being right again. A rule
+    that has to be edited every time the thing it describes grows is a rule that
+    will be edited wrongly, so it now reads both halves of the registry:
+    `_BUILTIN` says which module needs which extra, `_EXTRA_PROBE` says which
+    packages that extra brings.
     """
-    from claimcheck.emit import _BUILTIN
-    allowed = {mod.rsplit(".", 1)[-1] + ".py"
-               for mod, extra, _ in _BUILTIN.values() if extra == "graph"}
-    offenders = {str(p.relative_to(REPO)) for p in PKG.rglob("*.py")
-                 if p.name not in allowed and "rdflib" in _imports(p)}
+    from claimcheck.emit import _BUILTIN, _EXTRA_PROBE
+
+    #: package -> the module filenames permitted to import it.
+    allowed: dict[str, set[str]] = {}
+    for mod, extra, _ in _BUILTIN.values():
+        for pkg in _EXTRA_PROBE.get(extra or "", ()):
+            allowed.setdefault(pkg, set()).add(mod.rsplit(".", 1)[-1] + ".py")
+
+    offenders = {}
+    for p in PKG.rglob("*.py"):
+        for pkg in _imports(p) & set(allowed):
+            if p.name not in allowed[pkg]:
+                offenders.setdefault(pkg, set()).add(str(p.relative_to(REPO)))
     assert not offenders, (
-        f"rdflib imported by {offenders}, which do not declare the 'graph' "
-        f"extra in `emit._BUILTIN`. Declare it there, or do not import it.")
+        f"an extra's package is imported by a module that does not declare it: "
+        f"{ {k: sorted(v) for k, v in offenders.items()} }. Register the module "
+        f"in `emit._BUILTIN` with the extra it needs, or do not import it.")
 
 
 # ---------------------------------------------------------------------------
