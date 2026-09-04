@@ -1358,3 +1358,4 @@ python -m claimcheck.conform .            # can anyone read what you published?
   Recorded as a test rather than papered over.
 - **Statistics.** `correlation` is the only `kind`, with Pearson and Spearman
   behind it. Adding one is a function and a line in `ESTIMATORS`.
+# claimcheck
