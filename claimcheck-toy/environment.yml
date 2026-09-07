@@ -1,0 +1,15 @@
+# One environment with everything the toy needs. The point of naming them all
+# here is that the interpreter running Snakemake must also be able to import
+# rdflib, mlcroissant and matplotlib, or the workflow produces verdicts and then
+# fails three rules later.
+name: claimcheck-toy
+channels: [conda-forge]
+dependencies:
+  - python >=3.11
+  - snakemake-minimal
+  - matplotlib-base
+  - rdflib
+  - pip
+  - pip:
+      - mlcroissant
+      - claimcheck

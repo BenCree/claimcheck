@@ -1,0 +1,7 @@
+.snakemake/
+__pycache__/
+*.pyc
+
+# The parent repository ignores every `results/` directory. These four files are
+# the point of the example, so they are committed here.
+!results/

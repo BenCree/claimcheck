@@ -1,0 +1,60 @@
+# The toy project from the claimcheck tutorial, as a real workflow.
+#
+#   snakemake -n          # always first: read the job list
+#   snakemake -c4
+#
+# Running it through Snakemake is what makes the numbers quotable. Snakemake
+# records, per output, the input digests, the code, the command, the environment
+# and the times, and `claimcheck.grading` reads that record rather than keeping
+# a second copy. Run the scripts by hand instead and grading answers NONE.
+
+from claimcheck.workflow import RULES as CLAIMCHECK_RULES, interpreter
+
+# NOT `sys.executable`. The interpreter running Snakemake is frequently not one
+# that can import matplotlib or rdflib: launch this from an environment holding
+# only snakemake and the rules below produce verdicts and then fail on the
+# figure. `interpreter()` picks one that works and honours CLAIMCHECK_PY.
+PY = interpreter()
+
+
+rule all:
+    input:
+        "data/measurements.csv",
+        "results/claims.json",
+        "results/croissant.json",
+        "results/graph.ttl",
+        "results/dcat.ttl",
+        "figures/verdicts.png",
+
+
+rule simulate:
+    """Stand in for the lab. In a real project this file arrives from outside
+    and its dataset block says `origin = "manual"` instead."""
+    input:
+        script="simulate.py",
+    output:
+        csv="data/measurements.csv",
+    shell:
+        "{PY} {input.script} --out {output.csv} --seed 7"
+
+
+rule figures:
+    """The scatter and the verdict plot, as outputs of a rule rather than
+    something drawn by hand afterwards, so the figure and the number cannot
+    drift apart."""
+    input:
+        script="figures.py",
+        data="data/measurements.csv",
+        claims="results/claims.json",
+    output:
+        png="figures/verdicts.png",
+    shell:
+        "{PY} {input.script} --data {input.data} --claims {input.claims} "
+        "--out {output.png}"
+
+
+# check_claims, belief, croissant, graph and dcat come from the package, not
+# from a copy in this file. Their inputs are read from this project's own
+# context.toml, so a dataset added to the declaration becomes a dependency of
+# the verdict with no second place to update.
+include: CLAIMCHECK_RULES

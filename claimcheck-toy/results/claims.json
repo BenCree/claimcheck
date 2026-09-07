@@ -1,0 +1,80 @@
+{
+  "project": "widget_proxy",
+  "datasets": {
+    "runs": {
+      "origin": "computed",
+      "rows": 100,
+      "digests": {
+        "data/measurements.csv": "7761e541fd361df700a598eb1252b7604b0ddb269a46563ebf646ce549e0b86b"
+      }
+    }
+  },
+  "joins": [],
+  "rows_read": 100,
+  "relationships": [
+    {
+      "id": "R1_proxy_predicts",
+      "x": "runs.cheap_score",
+      "y": "runs.slow_measure_kJ",
+      "x_dataset": "runs",
+      "y_dataset": "runs",
+      "cross_dataset": false,
+      "kind": "correlation",
+      "method": "pearson",
+      "claimed": 0.9,
+      "evidence": {
+        "source": "Claimed at 0.9 BEFORE looking at the data. If the interval excludes 0.9 the\nprediction was wrong, in whichever direction. A verdict is about the prediction\nand not about whether the proxy is any good.\n",
+        "locator": "data/measurements.csv :: cheap_score, slow_measure_kJ"
+      },
+      "x_unit": "1",
+      "y_unit": "kJ/mol",
+      "resampling_unit": "batch",
+      "n_rows": 100,
+      "dropped": 0,
+      "estimate": 0.936426,
+      "ci_lo": 0.911862,
+      "ci_hi": 0.958671,
+      "ci_level": 0.95,
+      "n_units": 10,
+      "ci_width": 0.046809,
+      "verdict": "refuted",
+      "why": "claimed 0.9 lies OUTSIDE the 95% CI [0.912, 0.959] for r = 0.936, resampling 10 batch(s)",
+      "status": "falsified"
+    },
+    {
+      "id": "R2_control_finds_nothing",
+      "x": "runs.coin_flip",
+      "y": "runs.slow_measure_kJ",
+      "x_dataset": "runs",
+      "y_dataset": "runs",
+      "cross_dataset": false,
+      "kind": "correlation",
+      "method": "pearson",
+      "claimed": 0.0,
+      "evidence": {
+        "source": "Claimed at 0.0 and REQUIRED to hold. Noise must not correlate with the\nmeasurement. If this is refuted the construction is broken and R1 cannot be\nread, whichever way R1 went. It also shows how much room ten batches buys: the\nwidth of this interval is the smallest correlation this design can tell from\nnothing.\n",
+        "locator": "data/measurements.csv :: coin_flip, slow_measure_kJ"
+      },
+      "x_unit": "1",
+      "y_unit": "kJ/mol",
+      "resampling_unit": "batch",
+      "n_rows": 100,
+      "dropped": 0,
+      "estimate": 0.157235,
+      "ci_lo": -0.004375,
+      "ci_hi": 0.303321,
+      "ci_level": 0.95,
+      "n_units": 10,
+      "ci_width": 0.307697,
+      "verdict": "agrees",
+      "why": "claimed 0.0 lies within the 95% CI [-0.004, 0.303] for r = 0.157, resampling 10 batch(s)",
+      "status": "measured"
+    }
+  ],
+  "verdicts": {
+    "refuted": 1,
+    "agrees": 1
+  },
+  "any_refuted": true,
+  "any_unverifiable": false
+}

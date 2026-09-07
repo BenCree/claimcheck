@@ -1,0 +1,94 @@
+@prefix cr: <http://mlcommons.org/croissant/> .
+@prefix evi: <https://w3id.org/EVI#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sc: <https://schema.org/> .
+@prefix tl: <https://w3id.org/claimcheck/ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://w3id.org/claimcheck/project/widget_proxy> a sc:Dataset ;
+    sc:distribution <https://w3id.org/claimcheck/file/measurements_csv> ;
+    sc:name "widget_proxy" .
+
+<https://w3id.org/claimcheck/records/runs.batch> a cr:Field ;
+    rdfs:comment "Which batch a sample came from. The resampling unit: two samples in one batch are not independent of each other." ;
+    sc:name "batch" ;
+    tl:inDataset "runs" ;
+    tl:inFile <https://w3id.org/claimcheck/file/measurements_csv> ;
+    tl:unit "1" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/verdict/1> a evi:Method ;
+    rdfs:label "recomputed pearson from the data" ;
+    evi:directlyChallenges <https://w3id.org/claimcheck/relationship/1> .
+
+<https://w3id.org/claimcheck/evidence/1> a evi:Evidence ;
+    rdfs:label """Claimed at 0.9 BEFORE looking at the data. If the interval excludes 0.9 the
+prediction was wrong, in whichever direction. A verdict is about the prediction
+and not about whether the proxy is any good.
+""" ;
+    sc:identifier "data/measurements.csv :: cheap_score, slow_measure_kJ" ;
+    evi:directlySupports <https://w3id.org/claimcheck/relationship/1> ;
+    tl:extractedBy "unknown" .
+
+<https://w3id.org/claimcheck/evidence/2> a evi:Evidence ;
+    rdfs:label """Claimed at 0.0 and REQUIRED to hold. Noise must not correlate with the
+measurement. If this is refuted the construction is broken and R1 cannot be
+read, whichever way R1 went. It also shows how much room ten batches buys: the
+width of this interval is the smallest correlation this design can tell from
+nothing.
+""" ;
+    sc:identifier "data/measurements.csv :: coin_flip, slow_measure_kJ" ;
+    evi:directlySupports <https://w3id.org/claimcheck/relationship/2> ;
+    tl:extractedBy "unknown" .
+
+<https://w3id.org/claimcheck/records/runs.cheap_score> a cr:Field ;
+    rdfs:comment "The fast proxy. Arbitrary units, which is what `1` means here." ;
+    sc:name "cheap_score" ;
+    tl:inDataset "runs" ;
+    tl:inFile <https://w3id.org/claimcheck/file/measurements_csv> ;
+    tl:unit "1" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/records/runs.coin_flip> a cr:Field ;
+    rdfs:comment "A seeded uniform draw. The control." ;
+    sc:name "coin_flip" ;
+    tl:inDataset "runs" ;
+    tl:inFile <https://w3id.org/claimcheck/file/measurements_csv> ;
+    tl:unit "1" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/relationship/2> a tl:Relationship ;
+    rdfs:comment "claimed 0.0 lies within the 95% CI [-0.004, 0.303] for r = 0.157, resampling 10 batch(s)" ;
+    tl:claimed 0e+00 ;
+    tl:estimate 1.57235e-01 ;
+    tl:method "pearson" ;
+    tl:restsOn <https://w3id.org/claimcheck/evidence/2> ;
+    tl:status "measured" ;
+    tl:verdict "agrees" ;
+    tl:x <https://w3id.org/claimcheck/records/runs.coin_flip> ;
+    tl:y <https://w3id.org/claimcheck/records/runs.slow_measure_kJ> .
+
+<https://w3id.org/claimcheck/records/runs.slow_measure_kJ> a cr:Field ;
+    rdfs:comment "The expensive measurement this project is trying to avoid making." ;
+    sc:name "slow_measure_kJ" ;
+    tl:inDataset "runs" ;
+    tl:inFile <https://w3id.org/claimcheck/file/measurements_csv> ;
+    tl:unit "kJ/mol" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/relationship/1> a tl:Relationship ;
+    rdfs:comment "claimed 0.9 lies OUTSIDE the 95% CI [0.912, 0.959] for r = 0.936, resampling 10 batch(s)" ;
+    tl:claimed 9e-01 ;
+    tl:estimate 9.36426e-01 ;
+    tl:method "pearson" ;
+    tl:restsOn <https://w3id.org/claimcheck/evidence/1> ;
+    tl:status "falsified" ;
+    tl:verdict "refuted" ;
+    tl:x <https://w3id.org/claimcheck/records/runs.cheap_score> ;
+    tl:y <https://w3id.org/claimcheck/records/runs.slow_measure_kJ> .
+
+<https://w3id.org/claimcheck/file/measurements_csv> a cr:FileObject ;
+    sc:name "measurements_csv" ;
+    sc:sha256 "7761e541fd361df700a598eb1252b7604b0ddb269a46563ebf646ce549e0b86b" ;
+    tl:origin "computed" .
+

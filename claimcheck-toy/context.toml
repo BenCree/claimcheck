@@ -1,0 +1,90 @@
+# The declaration. Four kinds of block, and nothing else configures claimcheck.
+
+[project]
+name = "widget_proxy"
+title = "Does a cheap score predict the slow measurement?"
+context = """
+One hundred samples in ten batches. Each has a cheap_score that takes a second
+and a slow_measure_kJ that takes a day. The question is whether the cheap one can
+stand in for the slow one, so that only the promising samples get the slow
+measurement. coin_flip is a control: it is a seeded uniform draw and must not
+correlate with anything.
+
+The batch is the resampling unit. Ten of them is the smallest number that
+separates the control from the signal here: an earlier version used four and the
+noise came back "correlated" at r = 0.404, which was the design being
+underpowered rather than a defect.
+"""
+
+[[datasets]]
+id = "runs"
+origin = "computed"
+files = ["data/measurements.csv"]
+title = "One row per sample: the cheap score, the slow measurement and a control"
+# `computed` because `rule simulate` makes it, so the workflow is its
+# provenance. A file a person downloaded is `manual` instead, and then
+# `source`, `retrieved` and `sha256` become required:
+#
+#   origin = "manual"
+#   source = "https://example.org/widget-lab/measurements.csv"
+#   retrieved = "2026-09-07"
+#   sha256 = "9f2c..."
+#
+# because Snakemake knows nothing about a file no rule produced, so those are
+# the only record there is. Leave them out and the first call refuses.
+
+[[variables]]
+dataset = "runs"
+name = "cheap_score"
+unit = "1"
+description = "The fast proxy. Arbitrary units, which is what `1` means here."
+
+[[variables]]
+dataset = "runs"
+name = "slow_measure_kJ"
+unit = "kJ/mol"
+description = "The expensive measurement this project is trying to avoid making."
+
+[[variables]]
+dataset = "runs"
+name = "coin_flip"
+unit = "1"
+description = "A seeded uniform draw. The control."
+
+[[variables]]
+dataset = "runs"
+name = "batch"
+unit = "1"
+description = "Which batch a sample came from. The resampling unit: two samples in one batch are not independent of each other."
+
+[[relationships]]
+id = "R1_proxy_predicts"
+x = "runs.cheap_score"
+y = "runs.slow_measure_kJ"
+kind = "correlation"
+method = "pearson"
+claimed = 0.9
+resampling_unit = "batch"
+evidence.source = """
+Claimed at 0.9 BEFORE looking at the data. If the interval excludes 0.9 the
+prediction was wrong, in whichever direction. A verdict is about the prediction
+and not about whether the proxy is any good.
+"""
+evidence.locator = "data/measurements.csv :: cheap_score, slow_measure_kJ"
+
+[[relationships]]
+id = "R2_control_finds_nothing"
+x = "runs.coin_flip"
+y = "runs.slow_measure_kJ"
+kind = "correlation"
+method = "pearson"
+claimed = 0.0
+resampling_unit = "batch"
+evidence.source = """
+Claimed at 0.0 and REQUIRED to hold. Noise must not correlate with the
+measurement. If this is refuted the construction is broken and R1 cannot be
+read, whichever way R1 went. It also shows how much room ten batches buys: the
+width of this interval is the smallest correlation this design can tell from
+nothing.
+"""
+evidence.locator = "data/measurements.csv :: coin_flip, slow_measure_kJ"

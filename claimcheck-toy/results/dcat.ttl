@@ -1,0 +1,36 @@
+@prefix cc: <https://w3id.org/claimcheck/ns#> .
+@prefix dcat: <http://www.w3.org/ns/dcat#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix spdx: <http://spdx.org/rdf/terms#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://w3id.org/claimcheck/dataset/widget_proxy> a dcat:Dataset ;
+    dct:description """One hundred samples in ten batches. Each has a cheap_score that takes a second
+and a slow_measure_kJ that takes a day. The question is whether the cheap one can
+stand in for the slow one, so that only the promising samples get the slow
+measurement. coin_flip is a control: it is a seeded uniform draw and must not
+correlate with anything.
+
+The batch is the resampling unit. Ten of them is the smallest number that
+separates the control from the signal here: an earlier version used four and the
+noise came back "correlated" at r = 0.404, which was the design being
+underpowered rather than a defect.""" ;
+    dct:identifier "widget_proxy" ;
+    dct:title "Does a cheap score predict the slow measurement?" ;
+    dcat:distribution <https://w3id.org/claimcheck/distribution/data_measurements.csv> ;
+    cc:claimsChecked 2 ;
+    cc:claimsRefuted 1 ;
+    cc:claimsUnverifiable 0 .
+
+<https://w3id.org/claimcheck/checksum/data_measurements.csv> a spdx:Checksum ;
+    spdx:algorithm spdx:checksumAlgorithm_sha256 ;
+    spdx:checksumValue "7761e541fd361df700a598eb1252b7604b0ddb269a46563ebf646ce549e0b86b" .
+
+<https://w3id.org/claimcheck/distribution/data_measurements.csv> a dcat:Distribution ;
+    dct:provenance "Produced by a rule in this project's Snakemake workflow; the inputs, code and environment are in its metadata record." ;
+    dct:title "measurements.csv" ;
+    spdx:checksum <https://w3id.org/claimcheck/checksum/data_measurements.csv> ;
+    dcat:byteSize "3125"^^xsd:nonNegativeInteger ;
+    dcat:downloadURL "../data/measurements.csv" ;
+    dcat:mediaType "text/csv" .
+
