@@ -66,6 +66,17 @@ N_BOOT, SEED = 2000, 20260815
 #: is `docs/MISTAKES.md` §4 committed inside the file that argues against it.
 MAX_INFORMATIVE_WIDTH = 1.0
 
+#: A KNOWN ANSWER OF +-1 FROM TWO INDEPENDENT COMPUTATIONS. Two numbers computed
+#: two ways never agree exactly: an engine derivative and its central finite
+#: difference differ by about 1e-7 relative, so 1 - r = eps^2 / 2 is about
+#: 5e-15, and a bootstrap interval that tight excludes 1.0. That is agreement at
+#: numerical precision, not a refutation (mace_lambda/alkanes KF2a, 2026-09-25,
+#: refuted at 1 - r = 2.6e-15 over 378 frames). A claim of exactly +-1 agrees
+#: when |r - claimed| is within this tolerance, i.e. relative disagreement below
+#: about 1.4e-6; anything looser is still refuted. It is a tolerance, stated as
+#: one, and applies to no other claimed value.
+KNOWN_ANSWER_TOL = 1e-12
+
 
 def pearson(xs: list[float], ys: list[float]) -> float | None:
     """r, or None where it is undefined rather than zero.
@@ -367,8 +378,16 @@ def check(root: Path | str) -> dict:
         row |= {"ci_lo": round(lo, 6), "ci_hi": round(hi, 6),
                 "ci_level": 0.95, "n_units": n_eff, "ci_width": round(width, 6)}
         inside = rel["claimed"] is not None and lo <= rel["claimed"] <= hi
+        # A known answer of +-1 from two independent computations: see
+        # KNOWN_ANSWER_TOL. Only a claim of exactly +-1 gets it.
+        known = (not inside and rel["claimed"] is not None and abs(rel["claimed"]) == 1.0
+                 and abs(rel["claimed"] - r) <= KNOWN_ANSWER_TOL)
+        inside = inside or known
         where = (f"the 95% CI [{lo:.3f}, {hi:.3f}] for r = {r:.3f}, "
                  f"resampling {n_eff} {unit or 'row'}(s)")
+        if known:
+            where += (f"; |r - {rel['claimed']}| = {abs(rel['claimed'] - r):.1e}, within the "
+                      f"{KNOWN_ANSWER_TOL:.0e} allowed a known answer at numerical precision")
         limit = rel.get("max_ci_width", MAX_INFORMATIVE_WIDTH)
         if not inside:
             # A refutation survives a wide interval: lying outside an interval

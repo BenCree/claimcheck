@@ -221,3 +221,39 @@ def test_a_populated_resampling_unit_still_works(tmp_path):
     r = check(tmp_path)["relationships"][0]
     assert "EMPTY" not in r["why"], r["why"]
     assert r.get("n_units") == 4, r
+
+
+# ---------------------------------------------------------------------------
+# A known answer of +-1 from two independent computations
+# ---------------------------------------------------------------------------
+
+def _known_answer_rows(rel_noise: float, n: int = 60, seed: int = 3) -> list[dict]:
+    """y is x computed a second way, agreeing to `rel_noise` relative, the shape
+    of an engine derivative against its finite difference. Written with 17
+    significant figures so the CSV does not round the disagreement away."""
+    rng = random.Random(seed)
+    out = []
+    for i in range(n):
+        a = rng.uniform(-150, 150)
+        out.append({"x": f"{a:.17g}", "y": f"{a * (1 + rel_noise * rng.gauss(0, 1)):.17g}", "g": i})
+    return out
+
+
+def test_a_known_answer_of_one_agrees_at_numerical_precision(tmp_path):
+    """Two computations agreeing to 1e-7 relative, as an engine derivative and a
+    central finite difference do, have 1 - r of about 5e-15: a real difference,
+    and a bootstrap interval tight enough to exclude 1.0. Refuted before the
+    known-answer tolerance existed (mace_lambda/alkanes KF2a, 2026-09-25,
+    1 - r = 2.6e-15 over 378 frames)."""
+    d = check(_project(tmp_path, _known_answer_rows(1e-7), _rel(1.0), _VARS))
+    got = d["relationships"][0]
+    assert got["verdict"] == AGREES, got["why"]
+    assert "numerical precision" in got["why"]
+
+
+def test_the_known_answer_tolerance_does_not_rescue_a_real_disagreement(tmp_path):
+    """The other side: agreement to 1e-5 relative gives 1 - r of about 5e-11,
+    fifty times the tolerance, so a claim of exactly 1.0 is still refuted."""
+    d = check(_project(tmp_path, _known_answer_rows(1e-5), _rel(1.0), _VARS))
+    got = d["relationships"][0]
+    assert got["verdict"] == REFUTED, got["why"]
