@@ -40,6 +40,36 @@ from pathlib import Path
 
 COMPUTED, MANUAL = "computed", "manual"
 
+TOY, TEST_CASE, REFERENCE, REAL = "toy", "test_case", "reference", "real"
+LEVELS = (TOY, TEST_CASE, REFERENCE, REAL)
+
+#: Verification level ordering (0: toy, 1: test_case, 2: reference, 3: real)
+LEVEL_RANK = {TOY: 0, TEST_CASE: 1, REFERENCE: 2, REAL: 3}
+
+
+def canonical_level(val: str | None) -> str | None:
+    """Validate and normalise the verification level.
+
+    Levels:
+      toy: known numerical model or synthetic data (analytical toy, exact integration)
+      test_case: simpler version with known outcome testing only method mechanics
+      reference: retrospective benchmark dataset with published ground truth (e.g. protein-ligand)
+      real: prospective campaign (unmeasured library screening, prospective acquisition)
+    """
+    if val is None:
+        return None
+    normalized = str(val).strip().lower().replace(" ", "_").replace("-", "_")
+    if normalized == "testcase":
+        normalized = TEST_CASE
+    if normalized not in LEVELS:
+        raise DatasetError(
+            f"unknown verification level {val!r}. Must be one of: {', '.join(LEVELS)} "
+            f"(toy: known numerical model or synthetic data; "
+            f"test_case: simpler version with known outcome testing method; "
+            f"reference: retrospective experimental benchmark; "
+            f"real: prospective campaign)")
+    return normalized
+
 #: Required of a manual dataset, and required for a reason each.
 #:   source     — a file with no stated origin cannot be re-fetched or cited
 #:   retrieved  — "the current version" is not a version
@@ -102,7 +132,8 @@ def load(root: Path | str, spec: dict) -> dict:
 
     if not rows:
         raise DatasetError(f"dataset {did!r} has a header and no rows")
-    return {"id": did, "origin": origin, "rows": rows, "spec": spec,
+    level = canonical_level(spec.get("level"))
+    return {"id": did, "origin": origin, "level": level, "rows": rows, "spec": spec,
             "digests": {rel: sha256(root / rel) for rel in spec["files"]}}
 
 

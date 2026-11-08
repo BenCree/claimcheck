@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from claimcheck.relate import AGREES, REFUTED, UNVERIFIABLE, bootstrap_ci, check, pearson
+from claimcheck.relate import AGREES, ESTIMATORS, REFUTED, UNVERIFIABLE, _mean, _median, bootstrap_ci, check, pearson
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -257,3 +257,117 @@ def test_the_known_answer_tolerance_does_not_rescue_a_real_disagreement(tmp_path
     d = check(_project(tmp_path, _known_answer_rows(1e-5), _rel(1.0), _VARS))
     got = d["relationships"][0]
     assert got["verdict"] == REFUTED, got["why"]
+
+
+# ---------------------------------------------------------------------------
+# Verification levels: toy, test_case, reference, real
+# ---------------------------------------------------------------------------
+
+def test_relationship_inherits_verification_level_from_dataset(tmp_path):
+    """A claim inherits verification level from its dataset when not overridden."""
+    rows = _correlated(n=30, rho=0.9)
+    cols = list(rows[0])
+    lines = [",".join(cols)] + [",".join(str(r[c]) for c in cols) for r in rows]
+    (tmp_path / "d.csv").write_text("\n".join(lines) + "\n")
+    (tmp_path / "context.toml").write_text(
+        '[project]\nname = "lvl_test"\n\n'
+        '[[datasets]]\nid = "d"\norigin = "computed"\nlevel = "toy"\nfiles = ["d.csv"]\n\n'
+        f'{_VARS}\n{_rel(0.9)}\n'
+    )
+    d = check(tmp_path)
+    rel = d["relationships"][0]
+    assert rel["level"] == "toy"
+    assert "levels" in d
+    assert d["levels"]["toy"]["total"] == 1
+
+
+def test_relationship_explicit_verification_level_override(tmp_path):
+    """A claim can explicitly declare its verification level."""
+    rows = _correlated(n=30, rho=0.9)
+    cols = list(rows[0])
+    lines = [",".join(cols)] + [",".join(str(r[c]) for c in cols) for r in rows]
+    (tmp_path / "d.csv").write_text("\n".join(lines) + "\n")
+    rel_toml = (
+        '[[relationships]]\nx = "d.x"\ny = "d.y"\nkind = "correlation"\n'
+        'method = "pearson"\nclaimed = 0.9\nlevel = "test_case"\n'
+    )
+    (tmp_path / "context.toml").write_text(
+        '[project]\nname = "lvl_test"\n\n'
+        '[[datasets]]\nid = "d"\norigin = "computed"\nlevel = "reference"\nfiles = ["d.csv"]\n\n'
+        f'{_VARS}\n{rel_toml}\n'
+    )
+    d = check(tmp_path)
+    rel = d["relationships"][0]
+    assert rel["level"] == "test_case"
+    assert d["levels"]["test_case"]["total"] == 1
+
+
+
+# ---------------------------------------------------------------------------
+# `median` (2026-10-21): the typical resampling unit, a value method added for the median per-target rank correlation of
+# miel_outliers (amendment 5). Two-sided: it is the median and cannot be the mean, and it fails soft on a single unit or an empty column.
+# ---------------------------------------------------------------------------
+
+def test_median_is_registered_as_a_value_method_beside_the_mean():
+    assert ESTIMATORS["median"] == (_median, "value")
+    assert ESTIMATORS["mean"] == (_mean, "value"), "adding the median left the mean as it was"
+
+
+def test_median_estimator_odd_even_tie_single_and_empty():
+    assert _median([], [3.0, 1.0, 2.0]) == 2.0                         # odd count: the middle value
+    assert _median([], [4.0, 1.0, 3.0, 2.0]) == 2.5                    # even count: the mean of the middle two
+    assert _median([], [1.0, 2.0, 2.0, 3.0]) == 2.0                    # a tie across the middle of an even count
+    assert _median([], [2.0, 2.0, 2.0, 2.0]) == 2.0                    # all tied
+    assert _median([], [1.0, 2.0, 2.0, 10.0]) == 2.0                   # a tie, and an outlier that does not move it
+    assert _median([], [7.0]) == 7.0                                   # a single unit
+    assert _median([], []) is None                                     # the empty case
+
+
+def test_median_is_not_the_mean_on_a_skewed_set():
+    skew = [0.0, 0.0, 0.0, 0.0, 100.0]
+    assert _median([], skew) == 0.0 and _mean([], skew) == 20.0 and _median([], skew) != _mean([], skew)
+
+
+_MVARS = ('[[variables]]\ndataset = "d"\nname = "unit"\nunit = "1"\n\n'
+          '[[variables]]\ndataset = "d"\nname = "v"\nunit = "1"\n')
+
+
+def _median_claim(rid: str, method: str, lo: float | None, hi: float | None) -> str:
+    rng = ", ".join(("-inf" if lo is None else str(lo), "inf" if hi is None else str(hi)))
+    return (f'[[relationships]]\nid = "{rid}"\nx = "d.v"\ny = "d.v"\nkind = "value"\nmethod = "{method}"\n'
+            f'resampling_unit = "unit"\nclaimed_range = [{rng}]\n\n')
+
+
+def _verdicts(tmp_path: Path, values: list, rels: str) -> dict:
+    rows = [{"unit": f"u{i}", "v": v} for i, v in enumerate(values)]
+    d = check(_project(tmp_path, rows, rels, _MVARS, resampling_unit="unit"))
+    return {r["id"]: r for r in d["relationships"]}
+
+
+def test_a_median_claim_agrees_refutes_or_straddles_on_data_whose_median_is_known(tmp_path):
+    values = [0.10 + 0.001 * (i % 7) for i in range(80)]                # every unit between 0.100 and 0.106, median 0.103
+    v = _verdicts(tmp_path, values,
+                  _median_claim("in", "median", 0.05, 0.2) + _median_claim("out", "median", 0.5, 1.0)
+                  + _median_claim("edge", "median", 0.103, 1.0) + _median_claim("open_above", "median", None, 0.05))
+    assert v["in"]["verdict"] == AGREES and v["out"]["verdict"] == REFUTED
+    assert v["edge"]["verdict"] == UNVERIFIABLE, "the interval straddles the bound at the median itself"
+    assert v["open_above"]["verdict"] == REFUTED, "a one-sided range with an open end: every unit is above 0.05"
+    assert 0.100 <= v["in"]["estimate"] <= 0.106
+
+
+def test_a_few_huge_units_move_the_mean_claim_and_not_the_median_claim(tmp_path):
+    values = [(-1) ** i * 0.01 * (i % 5) for i in range(57)] + [100.0, 100.0, 100.0]       # median 0.0, mean about 5
+    v = _verdicts(tmp_path, values, _median_claim("med", "median", -0.2, 0.2) + _median_claim("avg", "mean", -0.2, 0.2))
+    assert v["med"]["verdict"] == AGREES and abs(v["med"]["estimate"]) < 0.05
+    assert v["avg"]["verdict"] != AGREES and v["avg"]["estimate"] > 4.0, "the same range on the mean cannot agree: the method is not the mean"
+
+
+def test_a_median_of_one_unit_or_of_an_empty_column_reads_unverifiable_and_does_not_raise(tmp_path):
+    (tmp_path / "one").mkdir()
+    one = _verdicts(tmp_path / "one", [0.1], _median_claim("m", "median", 0.0, 1.0))
+    assert one["m"]["verdict"] == UNVERIFIABLE                          # one unit: nothing to resample, so no interval
+    (tmp_path / "none").mkdir()
+    rows = [{"unit": f"u{i}", "v": ""} for i in range(5)]               # five units whose value is missing: the median of nothing
+    d = check(_project(tmp_path / "none", rows, _median_claim("m", "median", 0.0, 1.0), _MVARS, resampling_unit="unit"))
+    got = d["relationships"][0]
+    assert got["verdict"] == UNVERIFIABLE and got.get("estimate") is None

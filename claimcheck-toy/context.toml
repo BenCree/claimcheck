@@ -57,6 +57,12 @@ name = "batch"
 unit = "1"
 description = "Which batch a sample came from. The resampling unit: two samples in one batch are not independent of each other."
 
+[[variables]]
+dataset = "runs"
+name = "proxy_error"
+unit = "1"
+description = "cheap_score minus slow_measure_kJ, read only for its sign: positive where the proxy over-reads. Arbitrary units, as cheap_score is."
+
 [[relationships]]
 id = "R1_proxy_predicts"
 x = "runs.cheap_score"
@@ -88,3 +94,22 @@ width of this interval is the smallest correlation this design can tell from
 nothing.
 """
 evidence.locator = "data/measurements.csv :: coin_flip, slow_measure_kJ"
+
+[[relationships]]
+id = "R3_proxy_error_has_no_sign"
+x = "runs.proxy_error"
+y = "runs.proxy_error"
+kind = "value"
+method = "sign_test"
+claimed = 0.5
+resampling_unit = "batch"
+evidence.source = """
+A sign test, the value claim that carries a p. Each batch contributes one sign,
+the majority over its ten samples, and the estimate is the share of batches in
+which the proxy over-reads. Claimed at 0.5 and REQUIRED to hold: the noise is
+symmetric, so a batch is as likely to over-read as under-read. The row carries
+the exact two-sided binomial p against 0.5 beside the interval; on ten batches
+the interval is wide, and its width is what a claim such as "the proxy
+over-reads in most batches" would have to beat.
+"""
+evidence.locator = "data/measurements.csv :: proxy_error"

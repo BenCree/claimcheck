@@ -12,7 +12,7 @@ written by someone who already knew the answer.
 
     <dir>/context.toml    a dataset block per file, a variable block per column
     <dir>/data/<file>.csv the data, copied in, so the project is self-contained
-    <dir>/Snakefile       check_claims, croissant, and the two behind the extra
+    <dir>/Snakefile       an include of the package's shared rules, and nothing else
     <dir>/README.md       the two commands, and the two things left to do
 
 `snakemake -c1` works on the result immediately, and
@@ -240,6 +240,7 @@ def _relationship_template(datasets: list[dict]) -> list[str]:
     out += [
         '# kind = "correlation"',
         '# method = "pearson"        # or "spearman" for monotonic but curved',
+        '# level = "reference"       # "toy", "test_case", "reference", "real"',
         "# claimed = 0.0             # <- YOUR number. There is no sensible default.",
         "#",
         "# THE RESAMPLING UNIT IS DECLARED, NEVER ASSUMED. Leave it out and the",
@@ -308,6 +309,7 @@ def build_context(name: str, datasets: list[dict]) -> str:
               "[[datasets]]",
               f"id = {_toml_str(d['id'])}",
               'origin = "manual"',
+              '# level = "reference"       # "toy", "test_case", "reference", "real"',
               f"files = [{_toml_str(d['rel'])}]",
               "title = " + _toml_str(
                   f"{d['source_name']}: {d['n_rows']} rows x "
@@ -338,110 +340,53 @@ SNAKEFILE = '''# Layer 1: Snakemake, and nothing is added to it.
 #
 # Snakemake already records, per output, the input digests as sha256, the code,
 # the shell command, the conda environment, a software-stack hash and the times.
-# That IS the run record, so this project keeps none of its own — `grading`
-# reads Snakemake's store rather than a second copy of it.
+# That IS the run record, so this project keeps none of its own: `grading` reads
+# Snakemake's store rather than a second copy of it.
 #
-# EVERY DATASET IS AN INPUT to the rules that describe it, even though they read
-# the paths out of context.toml. Consuming a file is what puts its digest into
-# that store.
-#
-# `grading` is deliberately not a rule here: it would read the store that its
+# `grading` is deliberately not a rule here. It would read the store that its
 # own run is still writing, and grade its own output as an unfinished job.
+#
+# THE ADJUDICATE-AND-PUBLISH RULES ARE INCLUDED, NOT WRITTEN HERE. `check_claims`,
+# `croissant`, `graph`, `dcat` and `belief` are identical in every project, so
+# they live in the package and this file includes them. Writing them out per
+# project is what produced sixty-eight near-identical copies in one repository,
+# where a fix to any of them reached none of the others. Their inputs come from
+# this project's own context.toml, so a dataset added to the declaration becomes
+# a dependency of the verdict with no second place to update.
 
-import sys
-
-PY = sys.executable
-
-DATA = [
-%%DATA%%
-]
+from claimcheck.workflow import RULES as _CLAIMCHECK_RULES
 
 
 rule all:
     input:
         "results/claims.json",
         "results/croissant.json",
-
-
-rule check_claims:
-    input:
-        data=DATA,
-        context="context.toml",
-    output:
-        "results/claims.json",
-    params:
-        py=PY,
-    shell:
-        "{params.py} -m claimcheck.relate . {output}"
-
-
-rule croissant:
-    input:
-        data=DATA,
-        claims="results/claims.json",
-        context="context.toml",
-    output:
-        "results/croissant.json",
-    params:
-        py=PY,
-    shell:
-        "{params.py} -m claimcheck.croissant . {output}"
-
-
-# THE TWO BELOW NEED THE `graph` EXTRA, so they are NOT in `rule all`: a first
-# run that fails on an optional dependency teaches the reader that the tool is
-# broken.
-#
-#     pip install 'claimcheck[graph]'
-#     snakemake -c1 results/graph.ttl results/dcat.ttl
-
-rule graph:
-    input:
-        croissant="results/croissant.json",
-        claims="results/claims.json",
-        context="context.toml",
-    output:
         "results/graph.ttl",
-    params:
-        py=PY,
-    shell:
-        "{params.py} -m claimcheck.graph . {output}"
-
-
-rule dcat:
-    input:
-        data=DATA,
-        claims="results/claims.json",
-        context="context.toml",
-    output:
         "results/dcat.ttl",
-    params:
-        py=PY,
-    shell:
-        "{params.py} -m claimcheck.emit dcat . {output}"
+        # "results/belief.json",   # add once context.toml declares [belief]
 
 
-# WHY THIS RULE IS COMMENTED OUT RATHER THAN ABSENT. `jobs` publishes why each
-# run was launched and what would have counted as success -- the half of a
-# cluster submission that Snakemake's own store has no slot for. It needs a
-# `[jobs]` table naming a JSONL log, and it REFUSES a project that has none,
+include: _CLAIMCHECK_RULES
+
+
+# WHY THE jobs RULE IS ABSENT RATHER THAN COMMENTED OUT HERE. `claimcheck.jobs`
+# publishes why each run was launched and what would have counted as success,
+# the half of a cluster submission Snakemake's own store has no slot for. It
+# needs a `[jobs]` table naming a JSONL log and REFUSES a project that has none,
 # because "nothing was submitted" and "nobody wrote it down" are different
-# answers. A new project has neither yet, so uncommenting this is the second
-# step, not the first.
+# answers. Add the table, then the rule:
 #
 #     [jobs]
-#     records = "jobs.jsonl"
+#     log = "path/to/jobs.jsonl"
 #
-# rule jobs:
-#     input:
-#         records="jobs.jsonl",
-#         context="context.toml",
-#     output:
-#         "results/jobs.ttl",
-#     params:
-#         py=PY,
-#     shell:
-#         "{params.py} -m claimcheck.emit jobs . {output}"
+#     rule jobs:
+#         input:
+#             claims="results/claims.json",
+#             context="context.toml",
+#         output:
+#             "results/jobs.json",
+#         shell:
+#             "python -m claimcheck.jobs . {output}"
 '''
 
 README = '''# %%NAME%%
@@ -552,8 +497,10 @@ def scaffold(directory: Path | str, data, *, name: str | None = None,
             f"claimcheck.scaffold.")
 
     (directory / "context.toml").write_text(text)
-    (directory / "Snakefile").write_text(SNAKEFILE.replace(
-        "%%DATA%%", "\n".join(f'    "{d["rel"]}",' for d in parsed)))
+    # No %%DATA%% substitution any more: the shared rules read the dataset
+    # paths from context.toml, which this function has just written, so the
+    # Snakefile has nothing project-specific left in it.
+    (directory / "Snakefile").write_text(SNAKEFILE)
     n_num = sum(1 for d in parsed for c in d["header"]
                 if d["types"][c] in _NUMERIC)
     (directory / "README.md").write_text(

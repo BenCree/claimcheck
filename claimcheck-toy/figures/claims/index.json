@@ -1,0 +1,20 @@
+[
+ {
+  "id": "R1_proxy_predicts",
+  "verdict": "refuted",
+  "n_points": 100,
+  "figure": "figures/claims/R1_proxy_predicts.png"
+ },
+ {
+  "id": "R2_control_finds_nothing",
+  "verdict": "agrees",
+  "n_points": 100,
+  "figure": "figures/claims/R2_control_finds_nothing.png"
+ },
+ {
+  "id": "R3_proxy_error_has_no_sign",
+  "verdict": "agrees",
+  "n_points": 100,
+  "figure": "figures/claims/R3_proxy_error_has_no_sign.png"
+ }
+]

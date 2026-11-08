@@ -73,7 +73,9 @@ def main() -> int:
     bx.set_yticklabels([c["id"].split("_", 1)[1].replace("_", " ") for c in claims],
                        fontsize=9)
     bx.set_xlim(-0.35, 1.35)
-    bx.set_xlabel("correlation")
+    # R1 and R2 are correlations; R3 is a sign test, the share of batches in
+    # which the proxy over-reads. Both live on [-1, 1] and [0, 1], so one axis.
+    bx.set_xlabel("correlation (R1, R2) or share of batches (R3)")
     bx.set_title("The verdict: does the claim sit inside the interval?",
                  fontsize=11, color=INK)
     bx.grid(axis="x", alpha=.15, zorder=0)

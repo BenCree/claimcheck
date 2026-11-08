@@ -98,6 +98,7 @@ import argparse
 import base64
 import hashlib
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -471,6 +472,124 @@ def recorded_outputs(root: Path | str) -> list[str]:
     return sorted(set(keys))
 
 
+#: Two tiers, because one list was worse than none. The first version of this
+#: matched any alarming substring and reported 61 logs and 1,282 lines on a
+#: healthy project — `nan` inside `nanmedian`, `error` inside `error_type`,
+#: `'failed': 0` from a report saying nothing failed, and the word FAILURE
+#: inside a belief note explaining a result. A scanner that fires on all of that
+#: is one nobody reads, which is the exact defect this package records four
+#: times over.
+#:
+#: CERTAIN — the process died. Nothing legitimate prints these.
+CRASH_FATAL: tuple[str, ...] = (
+    r"\btraceback\b", r"segmentation fault", r"\bcore dumped\b",
+    r"died with signal", r"\bsigsegv\b", r"\bsigkill\b", r"\bsigbus\b",
+    r"out of memory", r"\boom-?kill", r"no space left",
+    r"cuda_error", r"\bkilled\b",
+)
+
+#: WORTH A LOOK — may be routine. Reported, never fatal.
+CRASH_SUSPECT: tuple[str, ...] = (
+    r"\berror\b", r"\bexception\b", r"\bfailed\b", r"\bfailure\b",
+    r"\bnan\b", r"not converged", r"\btimed? ?out\b",
+)
+
+#: Matched first. Each is here because it fired on a clean log.
+CRASH_EXEMPT: tuple[str, ...] = (
+    r"\b0 errors?\b", r"\bno errors?\b", r"errors?\s*[:=]\s*0",
+    r"failed\D{0,3}\s*[:=]\s*0", r"\b0 failed\b", r"\bnot evidence\b",
+    r"\[falsified\]", r'"error":\s*null', r"error_tolerance", r"\bewald\b",
+    r"standard_?error", r"\bstderr\b",
+)
+
+_FATAL = re.compile("|".join(CRASH_FATAL), re.I)
+_SUSPECT = re.compile("|".join(CRASH_SUSPECT), re.I)
+_EXEMPT = re.compile("|".join(CRASH_EXEMPT), re.I)
+
+#: Digits and paths removed, so 866 repetitions of one warning collapse to one
+#: line with a count instead of 866 lines nobody reads to the end of.
+_NOISE = re.compile(r"\d+|/\S+")
+
+
+def logs_scanned(root: Path | str) -> list[str]:
+    """Every log path Snakemake recorded that exists on disk. The denominator."""
+    root = Path(root)
+    store = root / STORE / "metadata"
+    if not store.is_dir():
+        return []
+    seen = set()
+    for rec_path in store.rglob("*"):
+        if not rec_path.is_file():
+            continue
+        try:
+            rec = json.loads(rec_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        for rel in rec.get("log") or []:
+            if (root / rel).is_file():
+                seen.add(rel)
+    return sorted(seen)
+
+
+def crashed(root: Path | str) -> list[dict]:
+    """Rules whose own log reports trouble, however the job exited.
+
+    **Exit status is not the question.** Snakemake records a rule as current
+    when the shell command returns 0 and the outputs exist. A tool that catches
+    its own failures per item, writes them into a column and returns 0 satisfies
+    both — measured: a semi-empirical arm lost 39 of 480 frames to SIGSEGV while
+    every rule exited 0 and every output was written.
+
+    Reads the log path Snakemake ITSELF recorded, so this cannot drift from a
+    naming convention. Returns one entry per log with `fatal` and `suspect`
+    counts and DISTINCT messages, not every line.
+    """
+    root = Path(root)
+    store = root / STORE / "metadata"
+    if not store.is_dir():
+        return []
+    logs: dict[str, str] = {}
+    for rec_path in store.rglob("*"):
+        if not rec_path.is_file():
+            continue
+        try:
+            rec = json.loads(rec_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        for rel in rec.get("log") or []:
+            logs.setdefault(rel, rec.get("rule", ""))
+
+    out = []
+    for rel, rule in logs.items():
+        log = root / rel
+        if not log.is_file():
+            continue
+        distinct: dict[str, dict] = {}
+        for n, line in enumerate(log.read_text(errors="replace").splitlines(), 1):
+            if _EXEMPT.search(line):
+                continue
+            fatal = bool(_FATAL.search(line))
+            if not fatal and not _SUSPECT.search(line):
+                continue
+            key = _NOISE.sub("#", line.strip())[:160]
+            d = distinct.setdefault(
+                key, {"first_line": n, "count": 0, "fatal": fatal,
+                      "text": line.strip()[:200]})
+            d["count"] += 1
+            d["fatal"] = d["fatal"] or fatal
+        if not distinct:
+            continue
+        msgs = sorted(distinct.values(), key=lambda d: (not d["fatal"], -d["count"]))
+        out.append({
+            "log": rel, "rule": rule,
+            "fatal": sum(m["count"] for m in msgs if m["fatal"]),
+            "suspect": sum(m["count"] for m in msgs if not m["fatal"]),
+            "distinct": len(msgs),
+            "messages": msgs[:4],
+        })
+    return sorted(out, key=lambda d: (-d["fatal"], -d["suspect"], d["log"]))
+
+
 def vanished(root: Path | str) -> list[dict]:
     """Outputs Snakemake recorded producing that are no longer on disk.
 
@@ -646,6 +765,163 @@ def reproduce(root: Path | str, paths=None, *, cores: int = 1,
 
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# One authoritative copy: does the declared origin match who actually makes it?
+# ---------------------------------------------------------------------------
+
+def check_origins(root: Path | str) -> list[dict]:
+    """Every declared dataset, and whether its `origin` matches reality.
+
+    `context.toml` already says of each dataset whether it is `computed` (a rule
+    in this workflow made it) or `manual` (a person put it there). Nothing until
+    now checked that against the workflow, so the two could disagree silently,
+    and the directory could not settle it either: in one project five of the
+    seven files in `data/` were rule outputs and two were hand-written, with
+    nothing in the path to tell them apart.
+
+    That separation is the point of the layout in Wilson et al., *Good enough
+    practices in scientific computing* (PLOS Comput Biol 13(6): e1005510, 2017),
+    which NVIDIA's RAPIDS project template adopts: raw data read-only in `data/`,
+    everything generated in `results/`, so location alone answers "who made
+    this". Moving files in an established project is disruptive and the
+    declaration can carry the same information, so this checks the declaration
+    instead of enforcing the path.
+
+    Two disagreements, and they fail in opposite directions:
+
+    * declared `computed`, no rule produces it. A number whose recipe is gone,
+      which is the failure the no-bare-numbers rule exists for.
+    * declared `manual`, a rule writes it. A raw input that is not raw, so its
+      pinned sha256 describes an output and re-running the workflow silently
+      changes what the claim was checked against.
+
+    Returns one row per declared file. `ok` is True when they agree.
+    """
+    root = Path(root).resolve()
+    own, shared = _rule_outputs(root)
+    out = []
+    for d in _context(root).get("datasets", []):
+        origin = d.get("origin")
+        for f in d.get("files", []):
+            rel = str(f)
+            # Exact against this project's own rules; tail-matched only
+            # against the shared workflow tree, where the head of the path is a
+            # variable and cannot be read.
+            has_rule = (_produces(rel, own)
+                        or _produces(rel, shared, tail_match=True))
+            if origin == "computed":
+                ok, why = has_rule, ("" if has_rule else
+                    "declared computed but no rule declares it as an output: "
+                    "the recipe is gone")
+            elif origin == "manual":
+                ok, why = not has_rule, ("" if not has_rule else
+                    "declared manual but a rule writes it: its pinned sha256 "
+                    "describes an output, not a source")
+            else:
+                ok, why = False, f"origin {origin!r} is neither computed nor manual"
+            out.append({"dataset": d.get("id"), "file": rel, "origin": origin,
+                        "level": d.get("level"),
+                        "has_rule": has_rule, "ok": ok, "why": why})
+    return out
+
+
+def _outputs_in(path: Path) -> set[str]:
+    """Quoted paths inside `output:` blocks of one Snakemake file.
+
+    The block ends at the first line indented no further than `output:` itself.
+    A first version used `((?: +.*\n)+)` and ran straight past the block into
+    `shell:`, so a command string was collected as an output path and matched
+    against filenames. Anchoring on the indentation is what makes it a parser
+    rather than a guess.
+
+    WILDCARD OUTPUTS ARE KEPT. A second version discarded every path containing
+    `{`, so a project declaring `data/zeroshot_mace_tt2000_per_molecule.csv`
+    against a rule writing `data/zeroshot_{tag}_per_molecule.csv` was told its
+    recipe was gone. The recipe is not gone, it is parameterised, and a check
+    that reports a failure where there is none stops being read. They come back
+    with their braces intact and `_produces` turns them into a pattern.
+    """
+    import re
+
+    try:
+        text = path.read_text()
+    except (OSError, UnicodeDecodeError):
+        return set()
+    out: set[str] = set()
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        m = re.match(r"^(\s*)output:\s*$", line)
+        if not m:
+            continue
+        indent = len(m.group(1))
+        for nxt in lines[i + 1:]:
+            if not nxt.strip():
+                continue
+            if len(nxt) - len(nxt.lstrip()) <= indent:
+                break
+            out |= set(re.findall(r'"([^"]+)"', nxt))
+            out |= set(re.findall(r"'([^']+)'", nxt))
+    return {o for o in out if "/" in o}
+
+
+def _produces(declared: str, outputs: set[str], tail_match: bool = False) -> bool:
+    """Does any rule output name `declared`, allowing for wildcards?
+
+    A wildcard becomes `[^/]+`: one path segment, never a `/`. Snakemake permits
+    a wildcard to span separators, but a pattern that did would let
+    `data/{anything}.csv` claim every csv under `data/` and turn this check into
+    one that cannot fail.
+    """
+    import re
+
+    for o in outputs:
+        if o == declared or (tail_match and o.endswith("/" + declared)):
+            return True
+        if "{" not in o:
+            continue
+        pattern = "".join(
+            "[^/]+" if part.startswith("{") else re.escape(part)
+            for part in re.split(r"(\{[^{}]*\})", o)
+        )
+        if re.fullmatch(pattern, declared):
+            return True
+        if tail_match and re.fullmatch(".*/" + pattern, declared):
+            return True
+    return False
+
+
+def _rule_outputs(root: Path) -> tuple[set[str], set[str]]:
+    """`(own, shared)`: output paths this project declares, and those declared
+    by the repository's shared workflow tree.
+
+    They are kept apart because the matching rules differ. A project's own file
+    must name the path exactly. A shared rule composes its output from path
+    variables, so only its tail is recoverable by reading, and a tail match is
+    allowed there and nowhere else. Allowing tail matches everywhere let one
+    project's Snakefile satisfy another project's declaration whenever both used
+    a name as ordinary as `data/manifest.csv`, which two projects here do.
+    """
+    top = root
+    while top != top.parent and not (top / ".git").is_dir():
+        top = top.parent
+    if top == top.parent:
+        top = root
+
+    own: set[str] = set()
+    for f in [root / "Snakefile", *root.rglob("*.smk")]:
+        if f.is_file():
+            own |= _outputs_in(f)
+
+    shared: set[str] = set()
+    wf = top / "workflow"
+    if wf.is_dir():
+        for pat in ("Snakefile*", "*.smk"):
+            for f in wf.rglob(pat):
+                if f.is_file():
+                    shared |= _outputs_in(f)
+    return own, shared
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="May this number be quoted? Grade files against Snakemake's "
@@ -665,10 +941,46 @@ def main(argv: list[str] | None = None) -> int:
                          "check here that can see a DELETION: everything else "
                          "walks the filesystem, so a removed file is simply "
                          "absent from the list and nothing notices.")
+    ap.add_argument("--crashed", action="store_true",
+                    help="scan each rule's own log, as recorded by Snakemake, "
+                         "for words that mean a run went wrong, and exit 1 if "
+                         "any are found. A rule that catches its own failures "
+                         "per item and returns 0 is recorded as current and "
+                         "says nothing; this is what reads the log instead.")
+    ap.add_argument("--origins", action="store_true",
+                    help="check each dataset's declared origin against whether "
+                         "a rule actually produces it, and exit 1 on a "
+                         "disagreement")
     ap.add_argument("--json", metavar="OUT", help="write the full report here")
     a = ap.parse_args(argv)
 
     root = Path(a.root)
+    # A directory with no context.toml grades 0 of 0 and exits 0, which is
+    # indistinguishable from a project that is fully graded and is how a bare
+    # project NAME, the form the al_mace rules file documents, silently reported
+    # "0 of 0 quotable" for a project whose real answer was "8 of 8". Refuse
+    # instead, and say what was probably meant.
+    if not (root / "context.toml").is_file():
+        import sys as _s
+        cand = sorted(Path.cwd().glob(f"**/{a.root}/context.toml"))
+        hint = (f"\n  did you mean: {cand[0].parent}" if cand else
+                "\n  the positional argument is a DIRECTORY, not a project name")
+        print(f"no context.toml in {root.resolve()}{hint}", file=_s.stderr)
+        return 2
+
+    if a.origins:
+        rows = check_origins(root)
+        if not rows:
+            print("no datasets declared in context.toml")
+            return 0
+        bad = [r for r in rows if not r["ok"]]
+        for r in rows:
+            lvl_tag = f" [{r['level']}]" if r.get("level") else ""
+            print(f"  {'ok  ' if r['ok'] else 'FAIL'}  {r['origin']:8}{lvl_tag} "
+                  f"{r['file']}" + (f"\n          {r['why']}" if r["why"] else ""))
+        print(f"{len(rows) - len(bad)} of {len(rows)} declared files agree with "
+              f"the workflow")
+        return 1 if bad else 0
 
     if a.vanished:
         gone = vanished(root)
@@ -700,6 +1012,24 @@ def main(argv: list[str] | None = None) -> int:
             if not reproduced:
                 print(f"  NOT REPRODUCED  {rel} — the re-run produced different "
                       f"bytes, so the recipe does not determine the file")
+
+    if a.crashed:
+        bad = crashed(root)
+        fatal = [d for d in bad if d["fatal"]]
+        for d in fatal:
+            print(f"  FATAL  {d['rule'] or '?'} — {d['log']}")
+            for m in d["messages"]:
+                if m["fatal"]:
+                    print(f"      x{m['count']:<4} line {m['first_line']}: {m['text']}")
+        for d in (d for d in bad if not d["fatal"]):
+            top = d["messages"][0]
+            print(f"  look   {d['rule'] or '?'} — {d['log']}  "
+                  f"({d['distinct']} distinct, {d['suspect']} line(s))")
+            print(f"      x{top['count']:<4} line {top['first_line']}: {top['text']}")
+        n_logs = len(crashed.__doc__ and logs_scanned(root) or [])
+        print(f"\n{len(fatal)} log(s) report a CRASH; "
+              f"{len(bad) - len(fatal)} more worth a look, of {n_logs} scanned")
+        return 1 if fatal else 0
 
     graded = grade_all(root, paths, reproduced=[k for k, v in done.items() if v])
     for grade in graded.values():

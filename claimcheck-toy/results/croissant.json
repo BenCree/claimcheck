@@ -60,7 +60,7 @@
       "name": "measurements_csv",
       "contentUrl": "../data/measurements.csv",
       "encodingFormat": "text/csv",
-      "sha256": "7761e541fd361df700a598eb1252b7604b0ddb269a46563ebf646ce549e0b86b",
+      "sha256": "f670a82bb95b3d630d16fda02fa39d571a7883dbb3ce5532ea4c588ff31f888e",
       "https://w3id.org/claimcheck/ns#origin": "computed"
     }
   ],
@@ -138,6 +138,23 @@
           },
           "https://w3id.org/claimcheck/ns#unit": "1",
           "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
+        },
+        {
+          "@type": "cr:Field",
+          "@id": "measurements_csv_records/proxy_error",
+          "name": "proxy_error",
+          "description": "cheap_score minus slow_measure_kJ, read only for its sign: positive where the proxy over-reads. Arbitrary units, as cheap_score is.",
+          "dataType": "sc:Float",
+          "source": {
+            "fileObject": {
+              "@id": "measurements_csv"
+            },
+            "extract": {
+              "column": "proxy_error"
+            }
+          },
+          "https://w3id.org/claimcheck/ns#unit": "1",
+          "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
         }
       ],
       "description": "One row per sample: the cheap score, the slow measurement and a control"
@@ -162,7 +179,8 @@
       "why": "claimed 0.9 lies OUTSIDE the 95% CI [0.912, 0.959] for r = 0.936, resampling 10 batch(s)",
       "evidenceSource": "Claimed at 0.9 BEFORE looking at the data. If the interval excludes 0.9 the\nprediction was wrong, in whichever direction. A verdict is about the prediction\nand not about whether the proxy is any good.\n",
       "evidenceLocator": "data/measurements.csv :: cheap_score, slow_measure_kJ",
-      "extractedBy": null
+      "extractedBy": null,
+      "level": null
     },
     {
       "x": "runs.coin_flip",
@@ -181,7 +199,28 @@
       "why": "claimed 0.0 lies within the 95% CI [-0.004, 0.303] for r = 0.157, resampling 10 batch(s)",
       "evidenceSource": "Claimed at 0.0 and REQUIRED to hold. Noise must not correlate with the\nmeasurement. If this is refuted the construction is broken and R1 cannot be\nread, whichever way R1 went. It also shows how much room ten batches buys: the\nwidth of this interval is the smallest correlation this design can tell from\nnothing.\n",
       "evidenceLocator": "data/measurements.csv :: coin_flip, slow_measure_kJ",
-      "extractedBy": null
+      "extractedBy": null,
+      "level": null
+    },
+    {
+      "x": "runs.proxy_error",
+      "y": "runs.proxy_error",
+      "xUnit": "1",
+      "yUnit": "1",
+      "crossDataset": false,
+      "method": "sign_test",
+      "claimed": 0.5,
+      "estimate": 0.75,
+      "ciLow": 0.375,
+      "ciHigh": 1.0,
+      "nUnits": 8,
+      "verdict": "agrees",
+      "status": "measured",
+      "why": "claimed 0.5 lies within the 95% CI [0.375, 1] for sign_test = 0.75 (6 of 8 batch(s) are the event, exact two-sided binomial p = 0.289 against 0.5), resampling 8 batch(s)",
+      "evidenceSource": "A sign test, the value claim that carries a p. Each batch contributes one sign,\nthe majority over its ten samples, and the estimate is the share of batches in\nwhich the proxy over-reads. Claimed at 0.5 and REQUIRED to hold: the noise is\nsymmetric, so a batch is as likely to over-read as under-read. The row carries\nthe exact two-sided binomial p against 0.5 beside the interval; on ten batches\nthe interval is wide, and its width is what a claim such as \"the proxy\nover-reads in most batches\" would have to beat.\n",
+      "evidenceLocator": "data/measurements.csv :: proxy_error",
+      "extractedBy": null,
+      "level": null
     }
   ]
 }

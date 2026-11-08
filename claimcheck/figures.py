@@ -19,17 +19,36 @@ a figure that says `unverifiable` and gives the reason reads as a result.
 
 Writes `<out-dir>/<claim id>.png` and `<out-dir>/index.json` (claim id, verdict,
 figure path). Needs matplotlib; nothing else in the package does.
+
+A shared matplotlib style can be named so that figures from different projects look
+alike: `[project] figstyle = "<path to an .mplstyle>"` in context.toml (a relative path
+is read from the directory holding context.toml), or the environment variable
+CLAIMCHECK_FIGSTYLE (a relative path is read from the working directory). The key wins
+over the variable. Each figure is drawn inside `matplotlib.style.context`, so the style
+reaches whatever `draw` leaves to matplotlib's rcParams: the font family, the sizes of
+tick and axis labels, spines, face and edge colours. It does not reach what `draw` sets
+itself: the verdict and unit colours, the sizes of the caption, verdict word and legend,
+the figure size, the resolution and the grid. A path that does not exist, or cannot be
+read as a style, prints one warning and the figures are drawn as they are without a
+style. With neither set no style is loaded or entered and the output is what it was
+before styles existed. When a style is applied, `index.json` names it (`figstyle`) with
+the first 16 hex characters of its sha256 (`figstyle_sha256`), because Snakemake does
+not track it.
 """
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import json
 import math
+import os
 import re
 import sys
 import textwrap
 import tomllib
 from pathlib import Path
+from typing import Any
 
 from claimcheck.datasets import DatasetError, join
 from claimcheck.datasets import load as load_dataset
@@ -38,6 +57,8 @@ from claimcheck.relate import _paired, _ref
 COLOUR = {"agrees": "#1a7f37", "refuted": "#c62828", "unverifiable": "#6e6e6e"}
 MAX_UNIT_COLOURS = 20
 WRAP = 118
+STYLE_KEY = "figstyle"                      # in [project] of context.toml
+STYLE_ENV = "CLAIMCHECK_FIGSTYLE"           # the same, from the environment; the key wins
 
 
 def statement(claim: dict, max_sentences: int = 2) -> str:
@@ -59,6 +80,14 @@ def result_line(claim: dict) -> str:
     if claim.get("estimate") is None:
         return f"{verdict.upper()}: {claim.get('why', 'not measured')}"
     unit = claim.get("resampling_unit") or "row"
+    if claim.get("kind") == "value":
+        # a value claim: the method's value, its interval, and the claimed value or range; no p and no R squared (relate reports none)
+        rng = claim.get("claimed_range")
+        what = f"claimed range [{rng[0]:g}, {rng[1]:g}]" if rng else f"claimed {_num(claim.get('claimed'), '{:.4g}')}"
+        if claim.get("ci_lo") is None:
+            return f"{claim['method']} = {_num(claim.get('estimate'), '{:.4g}')}, no interval; {what}: {verdict.upper()}. {claim.get('why', '')}"
+        return (f"{claim['method']} = {_num(claim.get('estimate'), '{:.4g}')}, 95% CI [{_num(claim.get('ci_lo'), '{:.4g}')}, "
+                f"{_num(claim.get('ci_hi'), '{:.4g}')}] over {claim.get('n_units', '?')} {unit}(s); {what}: {verdict.upper()}. {claim.get('why', '')}")
     p = claim.get("p_value")
     p_txt = (f"p < {claim['p_floor']:.1g}" if claim.get("p_at_floor") and claim.get("p_floor") else f"p = {_num(p, '{:.2g}')}")
     r2_on = claim.get("r_squared_is_on")
@@ -161,6 +190,57 @@ def draw(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str
     plt.close(fig)
 
 
+def style_choice(root: Path, ctx: dict) -> tuple[Path, str] | None:
+    """The style file asked for and where the request came from, or None when nobody asked.
+
+    `[project].figstyle` in context.toml wins over the environment variable CLAIMCHECK_FIGSTYLE, and a key that turns out to be unusable does not fall back to the
+    variable. A relative key is read from `root`, the directory holding context.toml; a relative variable from the working directory. An empty value is no value.
+    """
+    key = str((ctx.get("project") or {}).get(STYLE_KEY) or "").strip()
+    if key:
+        path = Path(key)
+        return (path if path.is_absolute() else root / path).absolute(), f"[project].{STYLE_KEY} in context.toml"
+    var = os.environ.get(STYLE_ENV, "").strip()
+    if var:
+        return Path(var).absolute(), f"the environment variable {STYLE_ENV}"
+    return None
+
+
+def load_style(root: Path | str, ctx: dict) -> tuple[Any, Path | None]:
+    """(the rcParams the style file sets, its path); (None, None) when no style is asked for or the one asked for cannot be used.
+
+    A style that cannot be used prints ONE warning and the figures are drawn without one: the verdicts were written before this step and are not touched. The file
+    is parsed once, here, so matplotlib reports a bad line once and not once per figure. `Any` because matplotlib is imported only when a style is asked for.
+    """
+    choice = style_choice(Path(root), ctx)
+    if choice is None:
+        return None, None
+    path, origin = choice
+
+    def refuse(why: str) -> tuple[None, None]:
+        print(f"WARNING claimcheck.figures: figstyle {path} (from {origin}) {why}; the figures are drawn with the default look. "
+              "The verdicts are unaffected.", file=sys.stderr)
+        return None, None
+
+    if not path.is_file():
+        return refuse("does not exist or is not a file")
+    import matplotlib
+
+    try:
+        return matplotlib.rc_params_from_file(path, use_default_template=False), path
+    except (OSError, ValueError) as exc:                            # unreadable, or not text (UnicodeDecodeError is a ValueError)
+        return refuse(f"could not be read as a matplotlib style ({type(exc).__name__}: {' '.join(str(exc).split())})")
+
+
+def _styled(params: Any) -> contextlib.AbstractContextManager[Any]:
+    """matplotlib's style context for `params`, or nothing at all when there is no style: the code that ran before styles existed."""
+    if params is None:
+        return contextlib.nullcontext()
+    from matplotlib import style
+
+    return style.context(params)
+
+
 def build(root: Path | str, out_dir: Path | str) -> list[dict]:
     root, out_dir = Path(root), Path(out_dir)
     ctx = tomllib.loads((root / "context.toml").read_text())
@@ -172,6 +252,10 @@ def build(root: Path | str, out_dir: Path | str) -> list[dict]:
             sets[d["id"]] = load_dataset(root, d)
         except (DatasetError, OSError):
             continue                     # the verdict already says why; the figure states it
+    params, style_path = load_style(root, ctx)
+    # Snakemake does not track the style (the figures are a side effect of check_claims and the variable is not an input), so the figures name the style that drew them.
+    styled = ({"figstyle": str(style_path), "figstyle_sha256": hashlib.sha256(style_path.read_bytes()).hexdigest()[:16]}
+              if style_path is not None else {})
     out_dir.mkdir(parents=True, exist_ok=True)
     index = []
     for claim in verdicts.get("relationships", []):
@@ -180,9 +264,10 @@ def build(root: Path | str, out_dir: Path | str) -> list[dict]:
         except DatasetError:
             pairs, clusters, x, y = [], None, str(claim.get("x")), str(claim.get("y"))
         path = out_dir / f"{claim['id']}.png"
-        draw(claim, pairs, clusters, x, y, files, path)
+        with _styled(params):
+            draw(claim, pairs, clusters, x, y, files, path)
         index.append({"id": claim["id"], "verdict": claim.get("verdict"), "n_points": len(pairs), "figure": str(path.relative_to(root))
-                      if path.is_relative_to(root) else str(path)})
+                      if path.is_relative_to(root) else str(path), **styled})
     (out_dir / "index.json").write_text(json.dumps(index, indent=1) + "\n")
     return index
 
@@ -192,11 +277,20 @@ def main(argv: list[str] | None = None) -> int:
     if len(argv) != 2:
         print(__doc__.strip().splitlines()[2].strip(), file=sys.stderr)
         return 2
+    # The shared `check_claims` rule runs this after the verdicts are written, so a missing plotting library must not fail the rule (Snakemake
+    # would delete results/claims.json). It warns and exits 0; the verdicts stand without figures.
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        print(f"WARNING claimcheck.figures: matplotlib is not importable with {sys.executable}; no claim figures written to {argv[1]}. "
+              "The verdicts are unaffected. Install matplotlib in that environment or set CLAIMCHECK_PY.", file=sys.stderr)
+        return 0
     index = build(argv[0], argv[1])
     counts: dict[str, int] = {}
     for r in index:
         counts[str(r["verdict"])] = counts.get(str(r["verdict"]), 0) + 1
-    print(f"{len(index)} claim figures in {argv[1]}: " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())))
+    in_style = f" (style {index[0]['figstyle']})" if index and "figstyle" in index[0] else ""
+    print(f"{len(index)} claim figures in {argv[1]}{in_style}: " + ", ".join(f"{v} {k}" for k, v in sorted(counts.items())))
     return 0
 
 

@@ -41,6 +41,19 @@ nothing.
     evi:directlySupports <https://w3id.org/claimcheck/relationship/2> ;
     tl:extractedBy "unknown" .
 
+<https://w3id.org/claimcheck/evidence/3> a evi:Evidence ;
+    rdfs:label """A sign test, the value claim that carries a p. Each batch contributes one sign,
+the majority over its ten samples, and the estimate is the share of batches in
+which the proxy over-reads. Claimed at 0.5 and REQUIRED to hold: the noise is
+symmetric, so a batch is as likely to over-read as under-read. The row carries
+the exact two-sided binomial p against 0.5 beside the interval; on ten batches
+the interval is wide, and its width is what a claim such as "the proxy
+over-reads in most batches" would have to beat.
+""" ;
+    sc:identifier "data/measurements.csv :: proxy_error" ;
+    evi:directlySupports <https://w3id.org/claimcheck/relationship/3> ;
+    tl:extractedBy "unknown" .
+
 <https://w3id.org/claimcheck/records/runs.cheap_score> a cr:Field ;
     rdfs:comment "The fast proxy. Arbitrary units, which is what `1` means here." ;
     sc:name "cheap_score" ;
@@ -68,6 +81,25 @@ nothing.
     tl:x <https://w3id.org/claimcheck/records/runs.coin_flip> ;
     tl:y <https://w3id.org/claimcheck/records/runs.slow_measure_kJ> .
 
+<https://w3id.org/claimcheck/relationship/3> a tl:Relationship ;
+    rdfs:comment "claimed 0.5 lies within the 95% CI [0.375, 1] for sign_test = 0.75 (6 of 8 batch(s) are the event, exact two-sided binomial p = 0.289 against 0.5), resampling 8 batch(s)" ;
+    tl:claimed 5e-01 ;
+    tl:estimate 7.5e-01 ;
+    tl:method "sign_test" ;
+    tl:restsOn <https://w3id.org/claimcheck/evidence/3> ;
+    tl:status "measured" ;
+    tl:verdict "agrees" ;
+    tl:x <https://w3id.org/claimcheck/records/runs.proxy_error> ;
+    tl:y <https://w3id.org/claimcheck/records/runs.proxy_error> .
+
+<https://w3id.org/claimcheck/records/runs.proxy_error> a cr:Field ;
+    rdfs:comment "cheap_score minus slow_measure_kJ, read only for its sign: positive where the proxy over-reads. Arbitrary units, as cheap_score is." ;
+    sc:name "proxy_error" ;
+    tl:inDataset "runs" ;
+    tl:inFile <https://w3id.org/claimcheck/file/measurements_csv> ;
+    tl:unit "1" ;
+    tl:unitSystem "UDUNITS-2" .
+
 <https://w3id.org/claimcheck/records/runs.slow_measure_kJ> a cr:Field ;
     rdfs:comment "The expensive measurement this project is trying to avoid making." ;
     sc:name "slow_measure_kJ" ;
@@ -89,6 +121,6 @@ nothing.
 
 <https://w3id.org/claimcheck/file/measurements_csv> a cr:FileObject ;
     sc:name "measurements_csv" ;
-    sc:sha256 "7761e541fd361df700a598eb1252b7604b0ddb269a46563ebf646ce549e0b86b" ;
+    sc:sha256 "f670a82bb95b3d630d16fda02fa39d571a7883dbb3ce5532ea4c588ff31f888e" ;
     tl:origin "computed" .
 

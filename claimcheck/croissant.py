@@ -149,6 +149,8 @@ def build(root: Path | str, claims_path: Path | None = None,
             # computed file from one somebody dropped in by hand has been given
             # the same confidence in both, and they do not deserve the same.
             fo[f"{NS}origin"] = d["origin"]
+            if d.get("level"):
+                fo[f"{NS}level"] = d["level"]
             if d["origin"] == "manual":
                 fo[f"{NS}manualSource"] = d.get("source")
                 fo[f"{NS}retrieved"] = d.get("retrieved")
@@ -202,13 +204,15 @@ def build(root: Path | str, claims_path: Path | None = None,
         f"{NS}claims": [
             {"x": r["x"], "y": r["y"], "xUnit": r.get("x_unit"),
              "yUnit": r.get("y_unit"), "crossDataset": r.get("cross_dataset"),
-             "method": r["method"], "claimed": r["claimed"],
+             "method": r["method"], "claimed": r.get("claimed"),
+             "claimedRange": r.get("claimed_range"),
              "estimate": r.get("estimate"), "ciLow": r.get("ci_lo"),
              "ciHigh": r.get("ci_hi"), "nUnits": r.get("n_units"),
              "verdict": r["verdict"], "status": r["status"], "why": r["why"],
              "evidenceSource": r.get("evidence", {}).get("source"),
              "evidenceLocator": r.get("evidence", {}).get("locator"),
-             "extractedBy": r.get("evidence", {}).get("extracted_by")}
+             "extractedBy": r.get("evidence", {}).get("extracted_by"),
+             "level": r.get("level")}
             for r in claims["relationships"]
         ],
     }

@@ -18,19 +18,19 @@ underpowered rather than a defect.""" ;
     dct:identifier "widget_proxy" ;
     dct:title "Does a cheap score predict the slow measurement?" ;
     dcat:distribution <https://w3id.org/claimcheck/distribution/data_measurements.csv> ;
-    cc:claimsChecked 2 ;
+    cc:claimsChecked 3 ;
     cc:claimsRefuted 1 ;
     cc:claimsUnverifiable 0 .
 
 <https://w3id.org/claimcheck/checksum/data_measurements.csv> a spdx:Checksum ;
     spdx:algorithm spdx:checksumAlgorithm_sha256 ;
-    spdx:checksumValue "7761e541fd361df700a598eb1252b7604b0ddb269a46563ebf646ce549e0b86b" .
+    spdx:checksumValue "f670a82bb95b3d630d16fda02fa39d571a7883dbb3ce5532ea4c588ff31f888e" .
 
 <https://w3id.org/claimcheck/distribution/data_measurements.csv> a dcat:Distribution ;
     dct:provenance "Produced by a rule in this project's Snakemake workflow; the inputs, code and environment are in its metadata record." ;
     dct:title "measurements.csv" ;
     spdx:checksum <https://w3id.org/claimcheck/checksum/data_measurements.csv> ;
-    dcat:byteSize "3125"^^xsd:nonNegativeInteger ;
+    dcat:byteSize "3772"^^xsd:nonNegativeInteger ;
     dcat:downloadURL "../data/measurements.csv" ;
     dcat:mediaType "text/csv" .
 

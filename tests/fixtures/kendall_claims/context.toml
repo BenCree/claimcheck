@@ -1,0 +1,81 @@
+# SYNTHETIC. Twenty-four rows over twelve units with exact ground truth: y_mono is x cubed, y_rev is 100 - x, y_const is a constant.
+# It exists to run `method = "kendall"` end to end (context.toml -> python -m claimcheck.relate -> claims.json); no real data is involved.
+
+[project]
+name = "kendall_claims"
+
+[[datasets]]
+id = "d"
+origin = "computed"
+level = "toy"
+files = ["data.csv"]
+
+[[variables]]
+dataset = "d"
+name = "x"
+unit = "1"
+
+[[variables]]
+dataset = "d"
+name = "y_mono"
+unit = "1"
+
+[[variables]]
+dataset = "d"
+name = "y_rev"
+unit = "1"
+
+[[variables]]
+dataset = "d"
+name = "y_const"
+unit = "1"
+
+[[relationships]]
+id = "K1_monotone_is_one"
+x = "d.x"
+y = "d.y_mono"
+kind = "correlation"
+method = "kendall"
+claimed = 1.0
+resampling_unit = "unit"
+evidence.source = "A curved monotone relation: tau-b is 1 where Pearson is not."
+
+[[relationships]]
+id = "K2_reversed_is_minus_one"
+x = "d.x"
+y = "d.y_rev"
+kind = "correlation"
+method = "kendall"
+claimed = -1.0
+resampling_unit = "unit"
+evidence.source = "A reversed relation: tau-b is -1."
+
+[[relationships]]
+id = "K3_wrong_sign_is_refuted"
+x = "d.x"
+y = "d.y_rev"
+kind = "correlation"
+method = "kendall"
+claimed = 1.0
+resampling_unit = "unit"
+evidence.source = "The wrong sign on the reversed column; a refutation is the expected verdict."
+
+[[relationships]]
+id = "K4_constant_is_unverifiable"
+x = "d.x"
+y = "d.y_const"
+kind = "correlation"
+method = "kendall"
+claimed = 1.0
+resampling_unit = "unit"
+evidence.source = "A constant column has no rank correlation; the verdict must be unverifiable, not a number."
+
+[[relationships]]
+id = "K5_range_agrees"
+x = "d.x"
+y = "d.y_mono"
+kind = "correlation"
+method = "kendall"
+claimed_range = [0.9, 1.0]
+resampling_unit = "unit"
+evidence.source = "A claimed range holds when the whole interval lies inside it."

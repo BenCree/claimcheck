@@ -74,6 +74,9 @@ def test_no_store_is_not_a_clean_bill_of_health(tmp_path):
     assert recorded_outputs(tmp_path) == []
     assert vanished(tmp_path) == []
 
+    # grading.main refuses a directory without context.toml (exit 2) before it
+    # reaches --vanished, so give it one to test the branch this test is about.
+    (tmp_path / "context.toml").write_text('[project]\nname = "never_ran"\n')
     from claimcheck.grading import main
     assert main([str(tmp_path), "--vanished"]) == 1
 

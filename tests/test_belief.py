@@ -419,7 +419,7 @@ def test_an_unverifiable_verdict_becomes_untested_and_carries_no_evidence(
     shutil.copytree(EXAMPLE, work)
     ctx = work / "context.toml"
     ctx.write_text(ctx.read_text().replace('method = "pearson"',
-                                           'method = "kendall"', 1))
+                                           'method = "somers_d"', 1))       # an unknown method; "kendall" was one until 2026-10-27
     shutil.rmtree(work / "results", ignore_errors=True)
     (work / "results").mkdir(parents=True)
     (work / "results" / "claims.json").write_text(

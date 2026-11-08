@@ -64,6 +64,20 @@ UNITS: dict[str, Unit] = {
     "kJ/mol": Unit("kJ/mol", "molar energy"),
     "eV": Unit("eV", "energy", "per particle, NOT per mole"),
     "log10(1/M)": Unit("log10(1/M)", "affinity", "higher = stronger binding"),
+    # The same quantity under the names the assay literature and every table in
+    # a practising project actually use. Declared rather than aliased silently:
+    # a reader seeing `pKD` in a context.toml should find it here.
+    #
+    # NOT convertible to a molar energy. dG = -RT ln(10) * pKD needs a
+    # temperature, so the relationship is a physical model and not a unit
+    # conversion; `compatible` will say they are different quantities, which is
+    # the correct and useful answer for a scorer in kcal/mol scored against an
+    # affinity.
+    "pKD": Unit("pKD", "affinity", "-log10(K_D / 1 M), higher = stronger binding"),
+    "pKi": Unit("pKi", "affinity", "-log10(K_i / 1 M), higher = stronger binding"),
+    "pIC50": Unit("pIC50", "affinity",
+                  "-log10(IC50 / 1 M). NOT interchangeable with pKD or pKi: an "
+                  "IC50 depends on substrate concentration and assay conditions"),
     # Length, added for trajectory work: RMSD, radius of gyration, contact
     # distances. UDUNITS-2 has no `angstrom` token in its base set, so
     # `0.1 nm` is the portable spelling of the same quantity and both are

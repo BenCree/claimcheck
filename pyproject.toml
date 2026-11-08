@@ -47,6 +47,9 @@ dependencies = []
 # rdflib at 1,495,780 against owlready2's 892,228, and rdflib needs no JVM.
 graph = ["rdflib>=7.0"]
 
+# matplotlib ONLY, and only for `figures.py`: one figure per claim, the claim as its title (2026-10-01).
+figures = ["matplotlib>=3.7"]
+
 # ─── PSDI ────────────────────────────────────────────────────────────────────
 # `pyshacl` WAS refused with the note "if PSDI conformance is adopted, this
 # comes back WITH the emitter, not before". It has been adopted, so here it is

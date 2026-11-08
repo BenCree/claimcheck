@@ -122,6 +122,7 @@ was given, and would have done that to a true claim just as readily.
 | module | for | needs |
 |---|---|---|
 | [`relate`](#relate) | recompute a claimed relationship | *nothing* |
+| [`figures`](#figures) | one figure per claim, the claim as its title; optionally in a shared matplotlib style | `matplotlib` |
 | [`datasets`](#datasets) | load data; refuse a changed hand-copied file or a fan-out join | *nothing* |
 | [`units`](#units) | convert between declared units, or raise | *nothing* |
 | [`labels`](#labels) | a positive rate that carries the rule defining it | *nothing* |
@@ -140,7 +141,7 @@ was given, and would have done that to a true claim just as readily.
 | [`psdi`](#psdi) | DCAT in PSDI's profile, checked against PSDI's own rules | `pyshacl` |
 | [`rocrate`](#rocrate) | the whole directory, named and hashed | `rocrate`, `roc-validator` |
 
-Eleven of the eighteen use nothing but the Python standard library. That is
+Eleven of the nineteen use nothing but the Python standard library. That is
 checked by a test that runs `relate`, `croissant` and `belief` behind an import
 hook refusing every non-stdlib package — not by reading the import lines, because
 a lazy import inside a function would pass a reading test and fail on a cluster
@@ -184,6 +185,65 @@ per claim with `max_ci_width`).
 declares the `kind` it computes, so a method paired with the wrong kind is refused
 rather than quietly mislabelled. An earlier version recorded `method` in every
 output and never dispatched on it, so `method = "spearman"` computed Pearson.
+
+---
+
+### `figures`
+
+One PNG per claim, with the claim as its title, drawn from the pairs its verdict was
+computed on. The shared `check_claims` rule runs it after `relate`.
+
+```bash
+python -m claimcheck.figures <project-dir> <out-dir>     # writes <out-dir>/<claim id>.png and <out-dir>/index.json
+```
+
+The caption carries the claim's id and statement, the estimate with its interval and the
+number of independent units, the claimed value and the verdict, p and R squared, and the
+rows and dataset the points came from. It needs `matplotlib`. Without it the step prints
+a warning and exits 0, and the verdicts stand.
+
+**A shared matplotlib style.** So that the figures of different projects look alike, name
+an `.mplstyle` file in `context.toml`:
+
+```toml
+[project]
+figstyle = "styles/lab.mplstyle"      # relative to the directory holding context.toml; an absolute path also works
+```
+
+or set the environment variable `CLAIMCHECK_FIGSTYLE` to the file. **The key wins over the
+variable.** A relative key is read from the directory holding `context.toml`; a relative
+variable is read from the working directory (the project directory when Snakemake runs
+the rule). An empty value counts as not set. Each figure is drawn inside
+`matplotlib.style.context`, so the rcParams are restored when the figure is done.
+
+If the path does not exist, is not a file, or cannot be read as a style, the step prints
+one `WARNING claimcheck.figures` line and draws the figures as it does without a style.
+The verdicts are written before this step and are unaffected. A key that fails does not
+fall back to the variable. With neither set, no style is loaded or entered and the output
+is what it was before styles existed (`tests/test_figures_default_look.py` stores the
+digests of figures drawn then).
+
+**What a style reaches, and what it does not.** `draw` leaves some things to matplotlib's
+rcParams and sets others itself, so a style file changes only the first group.
+
+| reached by a style | set by `draw` itself, so a style cannot change it |
+|---|---|
+| `font.family` (and so the font); `axes.labelsize`, `xtick.labelsize`, `ytick.labelsize`; spines, ticks and the line widths of the axes; face and edge colours; label and tick colours | the colours of the verdict (green, red, grey) and of the units (`tab20`), so `axes.prop_cycle` is not read; the caption at 8 pt, the verdict word at 10 pt and the legend at 6 and 7 pt, so `figure.titlesize`, `axes.titlesize`, `legend.fontsize` and `legend.title_fontsize` have no effect and `font.size` reaches only the tick and axis labels; the figure size (8.6 in wide), so `figure.figsize`; the resolution (130 dpi), so `savefig.dpi`; the grid, drawn with `ax.grid(alpha=0.25)`; the size of the points and the width of the y = x line |
+
+`matplotlib.style` also drops the keys that are not about style (`backend` and the others
+in `STYLE_BLACKLIST`) with a warning, so a style cannot change the Agg backend.
+
+Snakemake does not track the style. The figures are a side effect of `check_claims`, the
+variable is not an input, and the shared rule treats `context.toml` as `ancient()`, so
+editing the style file, or adding or changing the key, does not by itself redraw the
+figures. A project with its own `claim_figures` rule redraws them with
+`snakemake --forcerun claim_figures`, which leaves the verdicts alone. A project that
+relies on the shared rule only has no rule that draws the figures alone:
+`snakemake --forcerun check_claims` redraws them, but also reruns `relate`, rewrites
+`results/claims.json` and so makes `belief`, `croissant`, `graph` and `dcat` out of
+date. When a style is applied, every row of `index.json` records it: `figstyle` (the
+path as an absolute path) and `figstyle_sha256` (the first 16 hex characters of the
+file's digest).
 
 ---
 
@@ -1156,6 +1216,7 @@ extracted_by = "human"
 | `keywords` | no | dcat, psdi | a list of strings; **required** for a PSDI record, and never invented for you |
 | `publisher` | no | dcat, psdi | a name |
 | `results` | no | grading | the results directory name; defaults to `results` |
+| `figstyle` | no | figures | a matplotlib `.mplstyle` file the claim figures are drawn in; relative to the directory holding `context.toml`. The environment variable `CLAIMCHECK_FIGSTYLE` is the same from outside, and this key wins over it. See [`figures`](#figures) for what a style reaches |
 
 ### `[[datasets]]`
 
@@ -1190,7 +1251,7 @@ One block per claim to check.
 |---|---|---|
 | `x`, `y` | **yes** | `dataset.column`. A bare column name is allowed only when the project has exactly one dataset |
 | `kind` | **yes** | `"correlation"` |
-| `method` | **yes** | `"pearson"` or `"spearman"` — and the declared one is the one that runs |
+| `method` | **yes** | `"pearson"`, `"spearman"` or `"kendall"` (tau-b) — and the declared one is the one that runs |
 | `claimed` | **yes** | the value somebody asserted |
 | `join` | when `x` and `y` are in different datasets | a column in both that identifies a row; duplicates are refused |
 | `resampling_unit` | no | overrides the dataset's |

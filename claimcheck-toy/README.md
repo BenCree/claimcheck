@@ -41,6 +41,7 @@ One hundred samples in ten batches. Each sample has:
 | `slow_measure_kJ` | the real measurement, which takes a day |
 | `coin_flip` | a seeded random number. The control. |
 | `batch` | which batch it came from |
+| `proxy_error` | `cheap_score` minus `slow_measure_kJ`, read only for its sign |
 
 The question a lab actually has: **can we screen on the cheap one and only pay
 for the slow measurement on the promising samples?**
@@ -57,12 +58,19 @@ figures/verdicts.png      the picture above
 
 And the verdicts themselves:
 
-| | R1: the proxy | R2: the control |
-|---|---|---|
-| we claimed | 0.900 | 0.000 |
-| we measured | **0.936** | **0.157** |
-| 95% interval | [0.912, 0.959] | [-0.004, 0.303] |
-| verdict | **REFUTED** | **AGREES** |
+| | R1: the proxy | R2: the control | R3: the sign test |
+|---|---|---|---|
+| we claimed | 0.900 | 0.000 | 0.500 |
+| we measured | **0.936** | **0.157** | **0.750** (6 of 8 batches) |
+| 95% interval | [0.912, 0.959] | [-0.004, 0.303] | [0.375, 1.000] |
+| verdict | **REFUTED** | **AGREES** | **AGREES** |
+
+R1 and R2 are correlations. R3 is a value claim with `method = "sign_test"`:
+each batch contributes one sign, the majority over its ten samples, and the
+estimate is the share of batches in which the proxy over-reads. Two batches
+split five to five and were dropped as ties, so eight were counted. It is the
+one value claim that also carries a p, the exact two-sided binomial p against
+0.5 (here 0.289); the verdict still comes from the interval.
 
 ### Read the refutation carefully, because it is the whole point
 

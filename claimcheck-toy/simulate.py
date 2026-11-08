@@ -31,12 +31,16 @@ def main() -> int:
     for b in range(N_BATCHES):
         for i in range(PER_BATCH):
             truth = rng.uniform(0, 10)
+            cheap = round(truth + rng.gauss(0, PROXY_NOISE), 3)
             rows.append({
                 "sample": f"b{b}s{i}",
                 "batch": f"batch{b}",
-                "cheap_score": round(truth + rng.gauss(0, PROXY_NOISE), 3),
+                "cheap_score": cheap,
                 "slow_measure_kJ": round(truth, 3),
                 "coin_flip": round(rng.uniform(0, 1), 3),
+                # Derived, not drawn: a new draw here would shift every value
+                # after it. Read for its sign by R3, the sign-test control.
+                "proxy_error": round(cheap - round(truth, 3), 3),
             })
 
     out = Path(a.out)

@@ -43,6 +43,9 @@ rule wobbly:
 """
 
 
+MINIMAL_CONTEXT = '[project]\nname = "graded"\n'
+
+
 def _run_snakemake(work: Path, *targets: str) -> subprocess.CompletedProcess:
     sm = snakemake_cmd()
     assert sm is not None
@@ -60,6 +63,9 @@ def project(tmp_path_factory):
     work.mkdir(parents=True)
     (work / "Snakefile").write_text(SNAKEFILE)
     (work / "in.txt").write_text("hello\n")
+    # grading.main refuses a directory without context.toml (exit 2), so the
+    # command-line tests need one; grade_all and the readers do not.
+    (work / "context.toml").write_text(MINIMAL_CONTEXT)
     r = _run_snakemake(work)
     assert r.returncode == 0, (r.stdout + r.stderr)[-2000:]
     return work
@@ -324,3 +330,132 @@ def test_grading_a_project_that_never_ran_says_so_rather_than_crashing(tmp_path)
     graded = grading.grade_all(tmp_path)
     assert [g.grade for g in graded.values()] == ["NONE"]
     assert grading.quotable(tmp_path) == {}
+
+
+# ---------------------------------------------------------------------------
+# Scanning a rule's own log
+# ---------------------------------------------------------------------------
+
+def _with_log(tmp_path, text, rule="r"):
+    """A project whose Snakemake store records one rule with one log."""
+    import base64, json
+    root = tmp_path / "proj"
+    (root / ".snakemake" / "metadata").mkdir(parents=True)
+    (root / "context.toml").write_text(MINIMAL_CONTEXT)
+    (root / "logs").mkdir()
+    (root / "logs" / "r.log").write_text(text)
+    key = base64.urlsafe_b64encode(b"results/out.csv").decode()
+    (root / ".snakemake" / "metadata" / key).write_text(
+        json.dumps({"rule": rule, "log": ["logs/r.log"]}))
+    return root
+
+
+def test_a_crash_in_the_log_is_found_even_though_the_job_exited_cleanly(tmp_path):
+    """The case this exists for. Snakemake records a rule as current when the
+    command returns 0 and the outputs exist; a tool that catches its own
+    failures per item and returns 0 satisfies both. Measured: an arm lost 39 of
+    480 frames to SIGSEGV with every rule exiting 0."""
+    from claimcheck.grading import crashed
+    root = _with_log(tmp_path, "scoring frame 1\nxtb died with signal 11\ndone\n")
+    out = crashed(root)
+    assert len(out) == 1 and out[0]["fatal"] == 1
+    assert "died with signal 11" in out[0]["messages"][0]["text"]
+
+
+def test_a_clean_log_is_silent(tmp_path):
+    """The other half. A scanner that fires on healthy output stops being read,
+    which is the defect it was built to prevent."""
+    from claimcheck.grading import crashed
+    assert crashed(_with_log(tmp_path, "wrote 32 rows\n0 errors\nfinished\n")) == []
+
+
+def test_the_phrases_that_made_the_first_version_useless_are_exempt(tmp_path):
+    """Every line here fired on a healthy project and none means anything:
+    a count of zero failures, a belief note containing the word FAILURE, a
+    falsified claim, and `nan` inside an identifier."""
+    from claimcheck.grading import crashed
+    clean = (
+        "x7175a: {'rows': 20, 'failed': 0}\n"
+        "note (not evidence): THE FAILURE IS THE ENSEMBLE, NOT THE SELECTOR\n"
+        "[falsified] water_model --dominates_error_of--> potential_choice\n"
+        "rnd.append(np.nanmedian(x))\n"
+        "ewald_error_tolerance 0.0005\n"
+        "Exiting LEaP: Errors = 0; Warnings = 7\n")
+    assert crashed(_with_log(tmp_path, clean)) == []
+
+
+def test_one_warning_repeated_is_one_message_with_a_count(tmp_path):
+    """866 repetitions of one warning is one problem. Reporting it as 866 lines
+    is how a report stops being read to the end of."""
+    from claimcheck.grading import crashed
+    root = _with_log(tmp_path, "RuntimeWarning: All-NaN slice encountered\n" * 40)
+    out = crashed(root)
+    assert out[0]["distinct"] == 1
+    assert out[0]["messages"][0]["count"] == 40
+    assert out[0]["fatal"] == 0, "a warning is not a crash"
+
+
+def test_a_suspect_line_is_reported_and_does_not_fail_the_check(tmp_path):
+    """`should` and `must` kept apart: only a certain crash exits non-zero."""
+    from claimcheck.grading import crashed, main
+    root = _with_log(tmp_path, "WARNING: failed to reach tolerance, retrying\n")
+    out = crashed(root)
+    assert out and out[0]["fatal"] == 0 and out[0]["suspect"] == 1
+    assert main([str(root), "--crashed"]) == 0
+    hard = _with_log(tmp_path / "b", "Traceback (most recent call last):\n")
+    assert main([str(hard), "--crashed"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Wildcard outputs. Added 2026-09-13 after `--origins` told a project its recipe
+# was gone for two files that a parameterised rule writes. Two-sided: a declared
+# file the pattern reaches must pass, and one it does not must still fail, or the
+# fix has turned a check that cried wolf into one that cannot fail at all.
+
+
+def test_produces_matches_a_wildcard_output():
+    from claimcheck.grading import _produces
+
+    outputs = {"data/zeroshot_{tag}_per_molecule.csv"}
+    assert _produces("data/zeroshot_mace_tt2000_per_molecule.csv", outputs)
+    assert _produces("data/zeroshot_dpa3_per_molecule.csv", outputs)
+
+
+def test_produces_still_matches_a_literal_output():
+    from claimcheck.grading import _produces
+
+    assert _produces("data/profiles.csv", {"data/profiles.csv"})
+
+
+def test_produces_refuses_a_file_the_pattern_does_not_reach():
+    from claimcheck.grading import _produces
+
+    outputs = {"data/zeroshot_{tag}_per_molecule.csv"}
+    assert not _produces("data/zeroshot_mace_profiles.csv", outputs)
+    assert not _produces("data/per_molecule.csv", outputs)
+
+
+def test_a_wildcard_never_swallows_a_path_separator():
+    """`data/{x}.csv` must not claim `data/nested/thing.csv`.
+
+    A wildcard rendered as `.+` would let one rule claim every file under its
+    directory, which is the failure mode this fix could have introduced.
+    """
+    from claimcheck.grading import _produces
+
+    assert not _produces("data/nested/thing.csv", {"data/{x}.csv"})
+
+
+def test_two_wildcards_in_one_path_both_bind():
+    from claimcheck.grading import _produces
+
+    outputs = {"data/{slug}/cost_{device}.csv"}
+    assert _produces("data/run7/cost_cpu.csv", outputs)
+    assert not _produces("data/run7/cost.csv", outputs)
+
+
+def test_a_constrained_wildcard_is_read_as_a_wildcard():
+    """Snakemake allows `{name,regex}` inline; the name and the comma go too."""
+    from claimcheck.grading import _produces
+
+    assert _produces("data/cost_cpu.csv", {"data/cost_{device,(cpu|cuda)}.csv"})

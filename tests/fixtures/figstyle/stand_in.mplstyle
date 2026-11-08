@@ -1,0 +1,11 @@
+# A stand-in for a shared figure style, used only by tests/test_figstyle.py.
+# Every value is far from matplotlib's default so that a test can tell the style from the defaults.
+# Colours in a cycler are written without '#', which would start a comment here.
+font.family: monospace
+font.size: 17
+axes.labelsize: 19
+xtick.labelsize: 15
+ytick.labelsize: 15
+axes.spines.top: False
+axes.spines.right: False
+axes.prop_cycle: cycler('color', ['ff00ff', '00ffff', 'ffff00'])

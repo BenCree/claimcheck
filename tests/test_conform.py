@@ -254,28 +254,47 @@ def test_a_psdi_record_is_checked_against_psdi(tmp_path):
     assert "PSDI shapes @" in f.detail
 
 
-def test_the_shipped_dcat_record_points_where_a_consumer_is_not(published):
-    """A REAL FINDING, recorded rather than fixed.
+def test_the_shipped_dcat_record_now_resolves_from_where_it_sits(published):
+    """The decision the previous version of this test was waiting for.
 
-    `example/results/dcat.ttl` — written by the `dcat` rule exactly as rebuilt
-    in this fixture — carries `dcat:downloadURL "data/x.csv"`, relative to the
-    project root, exactly as `croissant.json` did before 2026-08-17, while the
-    document sits in `results/`. A relative literal declares no base, so
-    somebody holding this file alone has one base and it is the wrong one.
+    Until 2026-09-07 `example/results/dcat.ttl` carried
+    `dcat:downloadURL "data/x.csv"`, relative to the project root, while the
+    document sat in `results/`. A relative literal declares no base, so somebody
+    holding that file alone had one base and it was the wrong one. The test that
+    stood here recorded the finding and said to delete it when the choice was
+    made.
 
-    Not fixed here because the fix is a choice this module does not get to make:
-    rewrite the path relative to the output (what Croissant did), or emit an IRI
-    (what `psdi.py` does, and what DCAT's own range asks for). Both change the
-    published record and one of them changes a byte-exact Snakemake fixture.
-    **Delete this test when that decision is taken** — it will fail loudly.
+    The choice: rewrite the path relative to the output, which is what
+    `croissant.py` already did for `contentUrl` on 2026-08-17. The alternative,
+    emitting an absolute IRI as `psdi.py` does, resolves for nobody who moves the
+    directory, and DCAT's range permits either.
+
+    So the record must now READ, and this asserts it rather than describing why
+    it does not.
     """
     from claimcheck import dcat
     complaints, n = dcat.readback(published / "results" / "dcat.ttl")
     assert n == 2, "nothing was dereferenced, so this test checks nothing"
-    assert len(complaints) == 2, complaints
-    assert all("does not resolve from" in c for c in complaints), complaints
-    assert any("it resolves from" in c for c in complaints), (
-        "the report should name the base that does work, or the reader hunts")
+    assert not complaints, complaints
+
+
+def test_dcat_download_url_follows_the_output_directory(tmp_path):
+    """The known-bad side: the same project emitted for two destinations gives
+    two different paths, and only the matching one resolves.
+
+    This is what makes the fix a fix rather than a hardcoded `../`.
+    """
+    pytest.importorskip("rdflib")
+    from claimcheck import dcat
+    shutil.copytree(EXAMPLE, tmp_path / "e")
+    root = tmp_path / "e"
+
+    at_root = dcat.render(root, out_dir=root)
+    in_results = dcat.render(root, out_dir=root / "results")
+    assert at_root != in_results, (
+        "the destination must change the bytes, or the path is not relative to it")
+    assert 'downloadURL "data/' in at_root, at_root[:400]
+    assert 'downloadURL "../data/' in in_results, in_results[:400]
 
 
 def test_a_dcat_record_beside_its_data_reads(tmp_path):
@@ -285,7 +304,9 @@ def test_a_dcat_record_beside_its_data_reads(tmp_path):
     from claimcheck import dcat
     shutil.copytree(EXAMPLE, tmp_path / "e")
     out = tmp_path / "e" / "dcat.ttl"
-    out.write_text(dcat.render(tmp_path / "e"))
+    # The record is written at the project root here, not under `results/`, so
+    # it has to say so: `out_dir` is what the paths are made relative to.
+    out.write_text(dcat.render(tmp_path / "e", out_dir=out.parent))
     complaints, n = dcat.readback(out)
     assert n == 2 and not complaints, complaints
 

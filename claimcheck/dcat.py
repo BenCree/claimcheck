@@ -64,7 +64,31 @@ SPDX = Namespace("http://spdx.org/rdf/terms#")
 CC = Namespace(NS)
 
 
-def build(root: Path | str) -> Graph:
+def _download_url(root: Path, rel: str, out_dir: Path | str | None) -> str:
+    """A path that resolves from where the RECORD will sit, not from `root`.
+
+    `readback` below resolves a relative `dcat:downloadURL` against the folder
+    holding the Turtle, because that is the only base a consumer who has the
+    file actually holds. Writing `rel` verbatim made every emitted record
+    unreadable the moment it was saved under `results/`, which is where every
+    emitter here writes: `data/measurements.csv` resolved against `results/` and
+    found nothing. The module's own docstring described this failure for
+    Croissant and the DCAT emitter reproduced it.
+
+    `claimcheck.croissant._content_url` is the same function for the same
+    reason; the two are kept apart only because their record formats differ.
+    """
+    import os
+
+    if out_dir is None:
+        # Every emitter writes into `results/`, and that is what `readback`
+        # assumes, so an unspecified destination means the conventional one
+        # rather than the project root.
+        out_dir = root / "results"
+    return os.path.relpath(root / rel, Path(out_dir))
+
+
+def build(root: Path | str, out_dir: Path | str | None = None) -> Graph:
     root = Path(root)
     ctx = tomllib.loads((root / "context.toml").read_text())
     proj = ctx["project"]
@@ -104,7 +128,8 @@ def build(root: Path | str) -> Graph:
             dist = URIRef(f"{BASE}distribution/{rel.replace('/', '_')}")
             g.add((dist, RDF.type, DCAT.Distribution))
             g.add((dist, DCTERMS.title, Literal(Path(rel).name)))
-            g.add((dist, DCAT.downloadURL, Literal(rel)))
+            g.add((dist, DCAT.downloadURL,
+                   Literal(_download_url(root, rel, out_dir))))
             g.add((dist, DCAT.mediaType, Literal("text/csv")))
             if p.is_file():
                 g.add((dist, DCAT.byteSize,
@@ -143,9 +168,14 @@ def build(root: Path | str) -> Graph:
     return g
 
 
-def render(root: Path | str) -> str:
-    """The emitter interface: text, so `claimcheck.emit` need not know Turtle."""
-    return build(root).serialize(format="turtle")
+def render(root: Path | str, out_dir: Path | str | None = None) -> str:
+    """The emitter interface: text, so `claimcheck.emit` need not know Turtle.
+
+    `out_dir` is where the Turtle will be WRITTEN, and it changes the bytes:
+    every `downloadURL` is relative to it. Left unset it means `root/results`,
+    the conventional destination.
+    """
+    return build(root, out_dir).serialize(format="turtle")
 
 
 def readback(path: Path | str) -> tuple[list[str], int]:

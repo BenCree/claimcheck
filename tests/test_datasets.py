@@ -97,6 +97,33 @@ def test_an_undeclared_origin_is_refused_rather_than_defaulted(tmp_path):
             load_dataset(tmp_path, spec)
 
 
+def test_dataset_verification_levels(tmp_path):
+    """The four verification levels: toy, test_case, reference, real."""
+    _csv(tmp_path, "d.csv", "a,b\n1,2\n")
+    for lvl in ("toy", "test_case", "reference", "real"):
+        ds = load_dataset(tmp_path, {"id": "d", "origin": "computed",
+                                     "level": lvl, "files": ["d.csv"]})
+        assert ds["level"] == lvl
+
+    # Aliases canonicalise to test_case
+    for alias in ("test case", "test-case", "TEST_CASE"):
+        ds = load_dataset(tmp_path, {"id": "d", "origin": "computed",
+                                     "level": alias, "files": ["d.csv"]})
+        assert ds["level"] == "test_case"
+
+    # Unspecified level defaults to None for backward compatibility
+    ds = load_dataset(tmp_path, {"id": "d", "origin": "computed",
+                                 "files": ["d.csv"]})
+    assert ds["level"] is None
+
+
+def test_invalid_dataset_verification_level_is_refused(tmp_path):
+    _csv(tmp_path, "d.csv", "a,b\n1,2\n")
+    with pytest.raises(DatasetError, match="unknown verification level"):
+        load_dataset(tmp_path, {"id": "d", "origin": "computed",
+                                "level": "arbitrary", "files": ["d.csv"]})
+
+
 def test_the_example_pins_its_manual_dataset(tmp_path):
     """The shipped example must actually use the mechanism, or the mechanism is
     documentation. Copy it, corrupt the manual file, and the whole check

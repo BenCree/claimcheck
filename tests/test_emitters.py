@@ -50,11 +50,14 @@ def test_an_unknown_estimator_is_refused_with_the_list(tmp_path):
     shutil.copytree(EXAMPLE, work)
     ctx = work / "context.toml"
     ctx.write_text(ctx.read_text().replace('method = "pearson"',
-                                           'method = "kendall"'))
+                                           'method = "somers_d"'))          # was "kendall" until 2026-10-27, when it became a method
     got = check(work)["relationships"][0]
     assert got["verdict"] == "unverifiable"
-    assert "unknown method 'kendall'" in got["why"]
-    assert "pearson, spearman" in got["why"], "say what IS available"
+    assert "unknown method 'somers_d'" in got["why"]
+    from claimcheck.relate import ESTIMATORS
+
+    # every registered method is named (the list grew with value claims on 2026-10-01, so no fixed substring of it is stable)
+    assert all(name in got["why"] for name in ESTIMATORS), "say what IS available"
 
 
 def test_a_method_that_does_not_implement_the_declared_kind_is_refused(tmp_path):

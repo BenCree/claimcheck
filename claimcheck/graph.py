@@ -145,7 +145,12 @@ def build(root: Path | str) -> Graph:
             if ref in fields:
                 g.add((rel, TL[role], fields[ref]))
         g.add((rel, TL.method, Literal(r["method"])))
-        g.add((rel, TL.claimed, Literal(r["claimed"], datatype=XSD.double)))
+        if r.get("claimed") is not None:
+            g.add((rel, TL.claimed, Literal(r["claimed"], datatype=XSD.double)))
+        # A range's open side is +-inf, which xsd:double carries as INF and -INF.
+        if r.get("claimed_range") is not None:
+            g.add((rel, TL.claimedLow, Literal(float(r["claimed_range"][0]), datatype=XSD.double)))
+            g.add((rel, TL.claimedHigh, Literal(float(r["claimed_range"][1]), datatype=XSD.double)))
         if r.get("estimate") is not None:
             g.add((rel, TL.estimate, Literal(r["estimate"], datatype=XSD.double)))
         g.add((rel, TL.verdict, Literal(r["verdict"])))
