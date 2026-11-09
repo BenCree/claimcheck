@@ -592,6 +592,16 @@ def _fraction(xs: list[float], ys: list[float]) -> float | None:
     return sum(1.0 for v in ys if v >= 0.5) / len(ys) if ys else None
 
 
+def _mean_diff(xs: list[float], ys: list[float]) -> float | None:
+    """mean(y | x = 1) - mean(y | x = 0): the difference between two groups of rows, x the 0/1 group label (2026-11-09). Undefined (None)
+    when either group is empty, which a bootstrap draw can produce; the caller refuses any x other than 0 or 1 before this runs."""
+    a = [y for x, y in zip(xs, ys, strict=True) if x == 1.0]
+    b = [y for x, y in zip(xs, ys, strict=True) if x == 0.0]
+    if not a or not b:
+        return None
+    return sum(a) / len(a) - sum(b) / len(b)
+
+
 def _f1(xs: list[float], ys: list[float]) -> float | None:
     """F1 of a binary prediction `x` against a binary truth `y`: 2TP / (2TP + FP + FN).
 
@@ -1384,6 +1394,149 @@ def _pooled_diagnostics(info: dict, method: str, est: float, how: str = "harmoni
 # ---------------------------------------------------------------------------------------------------------------------------
 
 
+# STRATIFIED dF OVER TWO WELLS (2026-11-09), docs/RULES.md.
+#
+# A free energy from a lambda ladder that stayed in one conformational well W of the end state A is conditional on W:
+# dF_W = -kT ln (Z_B,W / Z_A,W). The free energy of the whole end state weights the wells by their populations in A,
+#     dF = -kT ln sum_W p_W exp(-dF_W / kT),
+# so with two wells (0, the well the reference ladder sampled, and 1, a second one) and delta = dF_1 - dF_0,
+#     dF - dF_0 = -kT ln (1 - p + p exp(-delta / kT)),   p = p_1 / (p_0 + p_1).
+# The shift lies between 0 (p = 0) and delta (p = 1) for every p. The two inputs come from different experiments with different
+# independent units: p from frames of plain MD of A (unit: the replica), delta from per-unit estimates of dF_1 - dF_0 (for example
+# ten times each window increment's difference between two ladders, unit: the increment). The interval resamples BOTH, each over its
+# own unit, in every draw; the row also carries the interval from each source alone, so a reader sees which one limits the answer.
+# x names the frames' well column (1 = well 1, 0 = well 0, anything else = neither well: counted, reported, left out, which is the
+# renormalisation over the two wells); y names the delta column of the other dataset; `kT` (required) is in y's unit;
+# `y_resampling_unit` names y's unit (absent: each y row is a unit); `offset` (optional) names a column of y's dataset, constant,
+# added to the estimate (the reference minus a comparison value, so that the estimate is the stratified reference against it).
+STRATIFIED_METHODS = ("stratified_dF",)
+
+
+def stratified_shift(p: float, delta: float, kT: float) -> float:
+    """-kT ln(1 - p + p exp(-delta / kT)), as a log-sum-exp so a large |delta| / kT does not overflow. 0 at p = 0, delta at p = 1."""
+    if not (0.0 <= p <= 1.0) or not (kT > 0) or not math.isfinite(delta):
+        raise ValueError(f"p = {p!r} must lie in [0, 1], kT = {kT!r} must be positive, delta = {delta!r} finite")
+    terms = []
+    if p < 1.0:
+        terms.append(math.log1p(-p))
+    if p > 0.0:
+        terms.append(math.log(p) - delta / kT)
+    m = max(terms)
+    return -kT * (m + math.log(sum(math.exp(t - m) for t in terms)))
+
+
+def _stratified_inputs(xrows: list[dict], x: str, xunit: str | None, yrows: list[dict], y: str, yunit: str | None,
+                       offset: str | None) -> dict:
+    """Per x unit [n_0, n_1, n_other], per y unit the list of delta values, and the offset. `refused` names why no estimate exists."""
+    info: dict = {"refused": None}
+    xu: dict[str, list[int]] = {}
+    for i, r in enumerate(xrows):
+        u = str(r.get(xunit, "")) if xunit else f"row{i}"
+        c = xu.setdefault(u, [0, 0, 0])
+        try:
+            v = float(r[x])
+        except (ValueError, TypeError, KeyError):
+            c[2] += 1
+            continue
+        if v == 1.0:
+            c[1] += 1
+        elif v == 0.0:
+            c[0] += 1
+        else:
+            c[2] += 1
+    yu: dict[str, list[float]] = {}
+    bad = []
+    for i, r in enumerate(yrows):
+        u = str(r.get(yunit, "")) if yunit else f"row{i}"
+        try:
+            v = float(r[y])
+        except (ValueError, TypeError, KeyError):
+            v = float("nan")
+        if not math.isfinite(v):
+            bad.append(u)
+            continue
+        yu.setdefault(u, []).append(v)
+    n0 = sum(c[0] for c in xu.values())
+    n1 = sum(c[1] for c in xu.values())
+    no = sum(c[2] for c in xu.values())
+    info |= {"_xu": xu, "_yu": yu, "n_rows": len(xrows), "n_first_well": n0, "n_second_well": n1, "n_other": no,
+             "share_other": round(no / len(xrows), 6) if xrows else None, "n_units": len(xu), "n_units_y": len(yu),
+             "n_rows_y": len(yrows)}
+    if bad:
+        info["refused"] = (f"{len(bad)} value(s) of {y} are blank, non-numeric or non-finite (in {', '.join(sorted(set(bad))[:5])}): a delta "
+                           f"that failed is a failed cell with a reason, not a value, and dropping it would change the estimate")
+        return info
+    if n0 + n1 == 0:
+        info["refused"] = f"no row of {x} is 0 or 1, so neither well is populated and p is undefined"
+        return info
+    if offset is not None:
+        if not yrows or offset not in yrows[0]:
+            info["refused"] = f"offset = {offset!r} is not a column of y's dataset"
+            return info
+        try:
+            vals = {float(r[offset]) for r in yrows}
+        except (ValueError, TypeError):
+            info["refused"] = f"offset column {offset!r} holds a non-numeric value"
+            return info
+        if len(vals) != 1 or not all(math.isfinite(v) for v in vals):
+            info["refused"] = f"offset column {offset!r} must hold one finite value on every row; it holds {len(vals)} distinct value(s)"
+            return info
+        info["offset"] = vals.pop()
+    else:
+        info["offset"] = 0.0
+    return info
+
+
+def stratified_bootstrap(xu: dict, yu: dict, kT: float, offset: float, level: float = 0.95) -> dict | None:
+    """Percentile interval of offset + stratified_shift(p, delta, kT), every draw resampling the x units AND the y units with
+    replacement, and the intervals from each source alone (the other held at its point value). None with fewer than 3 units on
+    either side, or when more than half the draws have no frame in either well."""
+    xs, ys = list(xu.values()), list(yu.values())
+    if len(xs) < 3 or len(ys) < 3:
+        return None
+    n0 = sum(c[0] for c in xs)
+    n1 = sum(c[1] for c in xs)
+    flat = [v for vs in ys for v in vs]
+    p0, d0 = n1 / (n0 + n1), sum(flat) / len(flat)
+    rng = random.Random(SEED)
+    both, ponly, donly, ps, ds = [], [], [], [], []
+    for _ in range(N_BOOT):
+        a = b = 0
+        for _ in range(len(xs)):
+            c = rng.choice(xs)
+            a += c[0]
+            b += c[1]
+        s = n = 0.0
+        for _ in range(len(ys)):
+            vs = rng.choice(ys)
+            s += sum(vs)
+            n += len(vs)
+        d = s / n
+        ds.append(d)
+        donly.append(offset + stratified_shift(p0, d, kT))
+        if a + b == 0:
+            continue
+        p = b / (a + b)
+        ps.append(p)
+        both.append(offset + stratified_shift(p, d, kT))
+        ponly.append(offset + stratified_shift(p, d0, kT))
+    if len(both) < N_BOOT // 2:
+        return None
+    alpha = (1 - level) / 2
+
+    def pct(v: list[float]) -> tuple[float, float]:
+        v = sorted(v)
+        return v[int(alpha * len(v))], v[min(int((1 - alpha) * len(v)), len(v) - 1)]
+
+    return {"p": p0, "delta": d0, "ci": pct(both), "ci_population_only": pct(ponly), "ci_delta_only": pct(donly),
+            "ci_p": pct(ps), "ci_delta": pct(ds), "n_draws": len(both)}
+
+
+def _stratified_placeholder(xs: list[float], ys: list[float]) -> float | None:
+    """Never called on data: stratified_dF reads two datasets and is computed by its own branch of `check` (see the block above)."""
+    return None
+
+
 ESTIMATORS: dict[str, tuple] = {
     "pearson": (pearson, "correlation"),
     "spearman": (spearman, "correlation"),
@@ -1456,6 +1609,12 @@ ESTIMATORS: dict[str, tuple] = {
     # POOL CHECK (2026-10-28): "pooling these groups is justified", adjudicated as a claim (see `pool_check_outcome`). Deterministic: estimate 1 when
     # no computed criterion fails, 0 when one does, claimed 1; no interval, because nothing is resampled. Same `x = y`, `group`, `protocol` keys.
     "pool_check": (_pool_check_placeholder, "value"),
+    # MEAN DIFFERENCE (2026-11-09): mean(y | x = 1) - mean(y | x = 0), x a 0/1 group column, the same bootstrap over the resampling unit.
+    # For "two halves of the replicas agree within a tolerance": a claimed_range around 0. Any x other than 0 or 1 is refused.
+    "mean_diff": (_mean_diff, "value"),
+    # STRATIFIED dF (2026-11-09): the reference free energy re-weighted over two conformational wells (see the block above). x and y are
+    # in DIFFERENT datasets with different units, each resampled over its own; no join. Keys: kT (required), y_resampling_unit, offset.
+    "stratified_dF": (_stratified_placeholder, "value"),
 }
 
 
@@ -1776,6 +1935,11 @@ def _value_verdict(rel: dict, row: dict, v: float, lo: float, hi: float, n_eff: 
         count = (f" (pooled over {row['n_groups_used']} {unit or 'group'}(s) on {row['df']} degrees of freedom, {row['n_groups_dropped']} dropped "
                  f"for a single value; the {row['interval']} interval decides ({row['interval_source']}); the {other} interval is {othertext}; "
                  f"{flag}{unchecked})")
+    elif rel["method"] == "stratified_dF":
+        po, do = row["ci_population_only"], row["ci_delta_only"]
+        count = (f" (p of the second well {row['p_second_well']:.4g} over {row['n_first_well'] + row['n_second_well']} rows in the two wells, "
+                 f"{row['n_other']} in neither; delta {row['delta']:.4g} over {row['n_units_y']} {row.get('y_resampling_unit') or 'row'}(s); "
+                 f"shift {row['shift']:.4g}; the population alone gives [{po[0]:.4g}, {po[1]:.4g}], delta alone [{do[0]:.4g}, {do[1]:.4g}])")
     if rel["method"] in ("pooled_sd", "pooled_se"):
         where = f"the 95% {row['interval']} CI [{lo:.4g}, {hi:.4g}] for {rel['method']} = {v:.4g}{count}, {n_eff} {unit or 'row'}(s)"
     elif rel["method"] == "binomial_count":
@@ -2021,6 +2185,65 @@ def check(root: Path | str) -> dict:
                 f"Known: {', '.join(sorted(sets))}"))
             continue
 
+        if rel["method"] in STRATIFIED_METHODS:
+            # TWO DATASETS, NO JOIN: the frames (x, resampled over `resampling_unit`) and the per-unit deltas (y, resampled over
+            # `y_resampling_unit`) are different samples, so their rows are never lined up. Every diagnostic goes on `row` before
+            # `_value_verdict`, which copies it.
+            kT = rel.get("kT")
+            yunit = rel.get("y_resampling_unit")
+            off = rel.get("offset")
+            row |= {"kT": kT, "y_resampling_unit": yunit, "offset_column": off}
+            bad_key = None
+            if not isinstance(kT, (int, float)) or isinstance(kT, bool) or not math.isfinite(kT) or kT <= 0:
+                bad_key = f"stratified_dF needs `kT`, a positive number in the unit of y ({rel['y']}); got {kT!r}"
+            elif yunit is not None and (not isinstance(yunit, str) or not yunit):
+                bad_key = f"y_resampling_unit = {yunit!r} must name a column of y's dataset"
+            elif off is not None and (not isinstance(off, str) or not off):
+                bad_key = f"offset = {off!r} must name a column of y's dataset"
+            elif xd == yd:
+                bad_key = ("stratified_dF reads the well labels and the deltas from two different datasets (frames of the end state, and "
+                           "per-unit estimates of the difference between two ladders); x and y name one dataset")
+            if bad_key:
+                out.append(verdict(UNVERIFIABLE, bad_key))
+                continue
+            xrows, yrows = sets[xd]["rows"], sets[yd]["rows"]
+            missing = ([f"{xd}.{x}"] if not xrows or x not in xrows[0] else []) + ([f"{yd}.{y}"] if not yrows or y not in yrows[0] else [])
+            missing += [f"{xd}.{unit} (resampling_unit)"] if unit and xrows and unit not in xrows[0] else []
+            missing += [f"{yd}.{yunit} (y_resampling_unit)"] if yunit and yrows and yunit not in yrows[0] else []
+            if missing:
+                out.append(verdict(UNVERIFIABLE, f"the data has no column {', '.join(missing)}"))
+                continue
+            undeclared = [c for (d_, c) in ((xd, x), (yd, y)) if declared.get((d_, c), {}).get("unit") is None]
+            if undeclared:
+                out.append(verdict(UNVERIFIABLE, f"no unit declared for {', '.join(undeclared)}"))
+                continue
+            info = _stratified_inputs(xrows, x, unit, yrows, y, yunit, off)
+            row |= {k: v for k, v in info.items() if k != "refused" and not k.startswith("_")}
+            if info["refused"]:
+                out.append(verdict(UNVERIFIABLE, info["refused"]))
+                continue
+            bs = stratified_bootstrap(info["_xu"], info["_yu"], float(kT), info["offset"])
+            p0 = info["n_second_well"] / (info["n_first_well"] + info["n_second_well"])
+            flat = [v for vs in info["_yu"].values() for v in vs]
+            d0 = sum(flat) / len(flat)
+            est = info["offset"] + stratified_shift(p0, d0, float(kT))
+            row |= {"estimate": round(est, 6), "p_second_well": round(p0, 6), "delta": round(d0, 6),
+                    "shift": round(est - info["offset"], 6), "offset": info["offset"]}
+            if bs is None:
+                out.append(verdict(UNVERIFIABLE, f"fewer than 3 independent units to resample (x: {info['n_units']} {unit or 'row'}(s), "
+                                                 f"y: {info['n_units_y']} {yunit or 'row'}(s)), so no interval exists"))
+                continue
+            lo, hi = bs["ci"]
+            row |= {"ci_lo": round(lo, 6), "ci_hi": round(hi, 6), "ci_level": 0.95, "ci_width": round(hi - lo, 6),
+                    "n_units": info["n_units"], "n_draws": bs["n_draws"],
+                    "ci_population_only": [round(v, 6) for v in bs["ci_population_only"]],
+                    "ci_delta_only": [round(v, 6) for v in bs["ci_delta_only"]],
+                    "ci_p_second_well": [round(v, 6) for v in bs["ci_p"]], "ci_delta": [round(v, 6) for v in bs["ci_delta"]],
+                    "interval_source": f"percentile bootstrap, each draw resampling {info['n_units']} {unit or 'row'}(s) of {xd} and "
+                                       f"{info['n_units_y']} {yunit or 'row'}(s) of {yd}"}
+            out.append(_value_verdict(rel, row, est, lo, hi, info["n_units"], unit, verdict))
+            continue
+
         # ONE DATASET, or two joined on a stated key. The join is refused
         # outright on duplicate keys and its coverage travels with the verdict —
         # a correlation over a 40%-covered join is a number about a different
@@ -2245,6 +2468,13 @@ def check(root: Path | str) -> dict:
                 out.append(verdict(UNVERIFIABLE, _empty_unit_message(unit, len(clusters))))
                 continue
             row |= {"n_rows": len(pairs), "dropped": dropped}
+            if rel["method"] == "mean_diff":
+                # THE GROUP COLUMN IS 0 OR 1, nothing else: a 2 or a 0.5 would silently fall in neither group and shrink both.
+                other = sum(1 for p in pairs if p[0] not in (0.0, 1.0))
+                if other:
+                    out.append(verdict(UNVERIFIABLE, f"mean_diff needs x = 0 or 1 on every row (the group); {other} row(s) of {x} hold another value"))
+                    continue
+                row |= {"n_group_1": sum(1 for p in pairs if p[0] == 1.0), "n_group_0": sum(1 for p in pairs if p[0] == 0.0)}
         r = estimate([p[0] for p in pairs], [p[1] for p in pairs])
         if r is None:
             out.append(verdict(UNVERIFIABLE,
