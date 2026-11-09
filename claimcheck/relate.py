@@ -506,6 +506,91 @@ def _betainc(a: float, b: float, x: float) -> float:
     return 1.0 - bt * _betacf(b, a, 1.0 - x) / b
 
 
+def beta_ppf(q: float, a: float, b: float) -> float:
+    """The q quantile of Beta(a, b): the x with I_x(a, b) = q, by bisection on `_betainc` to machine precision (standard library only).
+    beta_ppf(0.025, 8, 1) is 0.025 ** (1 / 8) = 0.630583, the lower Clopper-Pearson bound of 8 of 8."""
+    if not 0.0 < q < 1.0:
+        return 0.0 if q <= 0.0 else 1.0
+    lo, hi = 0.0, 1.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if _betainc(a, b, mid) < q:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo <= 1e-15:
+            break
+    return 0.5 * (lo + hi)
+
+
+def clopper_pearson(k: int, n: int, level: float = 0.95) -> tuple[float, float] | None:
+    """The exact (Clopper-Pearson 1934) interval for a binomial share k / n: the alpha/2 quantile of Beta(k, n - k + 1) and the
+    1 - alpha/2 quantile of Beta(k + 1, n - k), with the edges set exactly: the lower bound is 0 at k = 0 and the upper bound is 1
+    at k = n. Its coverage is at least `level` for every true share. 8 of 8 gives [0.6306, 1], 5 of 10 [0.1871, 0.8129], 0 of 10
+    [0, 0.3085]. None for n < 1 or k outside [0, n]."""
+    if n < 1 or not 0 <= k <= n:
+        return None
+    a = (1.0 - level) / 2.0
+    lo = 0.0 if k == 0 else beta_ppf(a, k, n - k + 1)
+    hi = 1.0 if k == n else beta_ppf(1.0 - a, k + 1, n - k)
+    return lo, hi
+
+
+def _count_units(rows: list[dict], y: str, unit: str | None) -> dict:
+    """The k of n for a `binomial_count` claim: one indicator per trial, a trial being one `resampling_unit` (or one row when no unit is
+    declared). True is 1, true, yes; false is 0, false, no. A missing or non-finite value is dropped and counted. Any other value, a
+    number other than 0 or 1 included, refuses the claim: a binomial count needs an indicator, and reading 0.7 as true would be a
+    threshold nobody declared.
+
+    ONE ROW PER UNIT, OR THE CLAIM IS REFUSED. The binomial assumes independent trials. Several rows under one unit (three end-state
+    runs of one ligand) are not independent trials, and collapsing them (a majority, any, all) is a choice about the question, so it
+    belongs in the rule that writes the column, not here."""
+    info: dict = {"refused": None}
+    vals: list[tuple[int, str]] = []
+    dropped = 0
+    for i, r in enumerate(rows):
+        raw = r.get(y)
+        text = str(raw).strip() if raw is not None else ""
+        low = text.lower()
+        if low in _MISSING_WORDS:
+            dropped += 1
+            continue
+        if low in _TRUE_WORDS:
+            v = 1
+        elif low in _FALSE_WORDS:
+            v = 0
+        else:
+            try:
+                f = float(text)
+            except ValueError:
+                info["refused"] = (f"column {y!r} is not an indicator: row {i + 1} holds {text!r}. A binomial count reads 0/1, "
+                                   f"true/false or yes/no")
+                return info
+            if not math.isfinite(f):
+                dropped += 1
+                continue
+            if f not in (0.0, 1.0):
+                info["refused"] = (f"column {y!r} is not an indicator: row {i + 1} holds {text!r}, which is neither 0 nor 1. A binomial "
+                                   f"count does not threshold a number; write the 0/1 column in the rule that makes the table")
+                return info
+            v = int(f)
+        vals.append((v, str(r.get(unit, "")).strip() if unit else str(i)))
+    if unit and vals and not any(c for _, c in vals):
+        info["refused"] = _empty_unit_message(unit, len(vals))
+        return info
+    if unit:
+        per = Counter(c for _, c in vals)
+        many = sorted(c for c, m in per.items() if m > 1)
+        if many:
+            info["refused"] = (f"{len(many)} {unit}(s) carry more than one row ({', '.join(many[:5])}{', ...' if len(many) > 5 else ''}; up to "
+                               f"{max(per.values())} rows each). A binomial count takes one independent trial per {unit}; rows within a "
+                               f"{unit} are not independent trials, and how to collapse them to one is a choice for the rule that writes "
+                               f"the table")
+            return info
+    info |= {"n_rows": len(vals), "dropped": dropped, "n_success": sum(v for v, _ in vals), "n_units": len(vals)}
+    return info
+
+
 def f_sf(f: float, d1: float, d2: float) -> float:
     """P(F > f) for F with (d1, d2) degrees of freedom: the p value of an F statistic. f_sf(39.0, 2, 2) is 0.025."""
     if f <= 0.0:
@@ -862,6 +947,11 @@ ESTIMATORS: dict[str, tuple] = {
     # units, and the row also carries the exact two-sided binomial p against 0.5 (`sign_test_p`), the one value method
     # with a p. The verdict is still the interval against `claimed` or `claimed_range`.
     "sign_test": (_sign_fraction, "value"),
+    # BINOMIAL COUNT (2026-11-09): "k of n units pass a rule", with the EXACT Clopper-Pearson interval in place of the bootstrap.
+    # Added because the percentile bootstrap of a share collapses to [1, 1] at n of n and cannot say how little 8 of 8 shows:
+    # Clopper-Pearson gives [0.631, 1]. One 0/1 row per resampling unit (several rows under one unit are refused, see
+    # `_count_units`). Nothing is resampled. The row carries the exact two-sided binomial p against 0.5 (`sign_test_p`).
+    "binomial_count": (_fraction, "value"),
     # POOLED SD AND SE (2026-10-28): the within-group sd of replicates pooled over groups, `group = "<column>"` naming the unit within which the
     # replicates sit (it must be the resampling unit; the bootstrap resamples groups). Interval: the same bootstrap, with the exact chi-square
     # interval beside it. The row carries the diagnostics for pooling and the trigger rule `pool_justified`, which never changes the verdict.
@@ -1069,13 +1159,17 @@ def _value_verdict(rel: dict, row: dict, v: float, lo: float, hi: float, n_eff: 
     `max_ci_width` and the interval is wider; outside: refuted). A `claimed_range = [lo, hi]` (-inf or inf for an open side) is judged by
     where the whole interval lies: inside the range, agrees; entirely outside, refuted; across a bound, unverifiable, because this design
     cannot tell on which side the value is. No p value and no R squared: they describe a relationship, and a value is not one.
-    The one exception is `sign_test`, whose caller has already put its exact binomial p on the row; `setdefault` keeps it."""
+    The exceptions are `sign_test` and `binomial_count`, whose callers have already put an exact binomial p on the row; `setdefault`
+    keeps it."""
     row["r_squared"] = None
     row.setdefault("p_value", None)
     row.setdefault("p_method", "not applicable to a value claim")
     count = ""
     if rel["method"] == "sign_test":
         count = (f" ({row['n_success']} of {n_eff} {unit or 'row'}(s) are the event, exact two-sided binomial "
+                 f"p = {row['p_value']:.3g} against 0.5)")
+    elif rel["method"] == "binomial_count":
+        count = (f" ({row['n_success']} of {n_eff} {unit or 'row'}(s) pass, {row['dropped']} dropped as missing; exact two-sided binomial "
                  f"p = {row['p_value']:.3g} against 0.5)")
     elif rel["method"] in ("pooled_sd", "pooled_se"):
         flag = ("the trigger rule says pooling is justified" if row["pool_justified"] else
@@ -1089,6 +1183,9 @@ def _value_verdict(rel: dict, row: dict, v: float, lo: float, hi: float, n_eff: 
                  f"{flag}{unchecked})")
     if rel["method"] in ("pooled_sd", "pooled_se"):
         where = f"the 95% {row['interval']} CI [{lo:.4g}, {hi:.4g}] for {rel['method']} = {v:.4g}{count}, {n_eff} {unit or 'row'}(s)"
+    elif rel["method"] == "binomial_count":
+        where = (f"the exact 95% Clopper-Pearson CI [{lo:.4g}, {hi:.4g}] for the share = {v:.4g}{count}, {n_eff} independent "
+                 f"{unit or 'row'}(s), nothing resampled")
     else:
         where = f"the 95% CI [{lo:.4g}, {hi:.4g}] for {rel['method']} = {v:.4g}{count}, resampling {n_eff} {unit or 'row'}(s)"
     if rel.get("claimed_range") is not None:
@@ -1375,6 +1472,31 @@ def check(root: Path | str) -> dict:
             n_eff = pg["n_groups_used"]
             row |= {"ci_lo": round(lo, 6), "ci_hi": round(hi, 6), "ci_level": 0.95, "n_units": n_eff, "ci_width": round(hi - lo, 6)}
             out.append(_value_verdict(rel, row, est0, lo, hi, n_eff, unit, verdict))
+            continue
+        elif rel["method"] == "binomial_count":
+            # EXACT, NOTHING RESAMPLED (2026-11-09). k of n from one 0/1 row per unit, the Clopper-Pearson interval, the exact binomial p
+            # against 0.5. Every field goes on `row` before `_value_verdict`, which copies it.
+            if rel["x"] != rel["y"]:
+                out.append(verdict(UNVERIFIABLE, f"binomial_count is a one-column method: write x = y (x = {rel['x']!r}, y = {rel['y']!r})"))
+                continue
+            cnt = _count_units(rows, y, unit)
+            row |= {k_: v_ for k_, v_ in cnt.items() if k_ != "refused"}
+            if cnt["refused"]:
+                out.append(verdict(UNVERIFIABLE, cnt["refused"]))
+                continue
+            k_s, n_u = cnt["n_success"], cnt["n_units"]
+            if n_u == 0:
+                out.append(verdict(UNVERIFIABLE, f"no {unit or 'row'} has a usable value ({cnt['dropped']} dropped as missing or not finite), "
+                                                 f"so there is no count to bound"))
+                continue
+            lo, hi = clopper_pearson(k_s, n_u)
+            est0 = k_s / n_u
+            row |= {"estimate": round(est0, 6), "ci_lo": round(lo, 6), "ci_hi": round(hi, 6), "ci_level": 0.95, "n_units": n_u,
+                    "ci_width": round(hi - lo, 6), "interval": "clopper_pearson",
+                    "interval_source": "exact binomial (Clopper and Pearson 1934); assumes the units are independent trials",
+                    "p_value": sign_test_p(k_s, n_u), "p_null": 0.5,
+                    "p_method": f"exact two-sided binomial against 0.5 over {n_u} {unit or 'row'}(s)"}
+            out.append(_value_verdict(rel, row, est0, lo, hi, n_u, unit, verdict))
             continue
         elif rel["method"] == "sign_test":
             # ONE VALUE PER UNIT BEFORE THE BOOTSTRAP, because the estimator sees only the resampled values and the
