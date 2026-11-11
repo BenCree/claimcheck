@@ -133,6 +133,53 @@ def spearman(xs: list[float], ys: list[float]) -> float | None:
     return pearson(rank(xs), rank(ys))
 
 
+def roc_auc(xs: list[float], ys: list[float]) -> float | None:
+    """Area under the ROC curve of a score `y` against a binary label `x`: the probability that a
+    randomly chosen positive outscores a randomly chosen negative, with a tie counting a half.
+
+    ADDED 2026-11-12 for virtual screening, where the question is "does the score put the known
+    binders near the top", and a correlation is the wrong shape for it: with 29 hits among 1,450
+    decoys a Spearman is dominated by the ordering of the decoys among themselves, which nobody
+    acts on, while AUC asks only about hit against decoy pairs. 0.5 is no better than chance and
+    1.0 is a perfect ranking.
+
+    `x` IS THE LABEL AND `y` IS THE SCORE, and they do not commute. The label is read as an
+    indicator at >= 0.5, the same convention `fraction` and `f1` use. HIGHER `y` MEANS MORE LIKELY
+    POSITIVE: a score where a better compound is more negative, as a docking affinity is, must be
+    negated by the rule that writes the table, in a column whose name says so. The sign convention
+    is a choice that could have gone differently, so it belongs in the declaration, not here.
+
+    Computed from average ranks (the Mann-Whitney U identity), so ties between a positive and a
+    negative contribute exactly a half rather than being ordered by floating-point noise.
+
+    Returns None when either class is empty, so the claim comes back `unverifiable` rather than
+    0.5. A file whose join dropped every hit is then distinguishable from an honest chance result.
+
+    Its square is not reported: AUC is a probability of correct ordering, not a correlation, so
+    squaring it is not a share of anything.
+    """
+    if not xs or len(xs) != len(ys):
+        return None
+    pos = [i for i, v in enumerate(xs) if v >= 0.5]
+    neg = [i for i, v in enumerate(xs) if v < 0.5]
+    if not pos or not neg:
+        return None
+    order = sorted(range(len(ys)), key=lambda i: ys[i])
+    rank = [0.0] * len(ys)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and ys[order[j + 1]] == ys[order[i]]:
+            j += 1
+        avg = (i + j) / 2 + 1
+        for k in range(i, j + 1):
+            rank[order[k]] = avg
+        i = j + 1
+    n_pos, n_neg = len(pos), len(neg)
+    u = sum(rank[i] for i in pos) - n_pos * (n_pos + 1) / 2
+    return u / (n_pos * n_neg)
+
+
 def kendall(xs: list[float], ys: list[float]) -> float | None:
     """Kendall's tau-b, the tie-corrected rank correlation: (C - D) / sqrt((C + D + Tx) * (C + D + Ty)).
 
@@ -924,6 +971,11 @@ ESTIMATORS: dict[str, tuple] = {
     # KENDALL TAU-B (2026-10-27): the tie-corrected rank correlation, same bootstrap over the resampling unit, same permutation p, and
     # `tie_tol` as for spearman. Its R squared is tau-b squared, a squared rank correlation and not a share of variance.
     "kendall": (kendall, "correlation"),
+    # ROC AUC (2026-11-12): "the score puts the known binders near the top", for screening sets where
+    # the hits are a small share of the rows. `x` is the binary label, `y` the score with higher
+    # meaning more likely positive. Same bootstrap over the resampling unit; its permutation p is
+    # centred on 0.5, not 0, because that is its null. No R squared.
+    "roc_auc": (roc_auc, "correlation"),
     # VALUE CLAIMS (2026-10-01). Every prediction is adjudicated here, not in an
     # analysis script, including the ones that are not correlations: an sd, a
     # variance share, a mean error, a count that passes a rule. They take the
@@ -986,7 +1038,7 @@ def kendall_tie_tol(tol: float):
 
 
 def permutation_p(pairs: list[tuple[float, float]], clusters: list[str] | None,
-                  estimate=pearson, n_perm: int = N_BOOT) -> tuple[float, float] | None:
+                  estimate=pearson, n_perm: int = N_BOOT, centre: float = 0.0) -> tuple[float, float] | None:
     """Two-sided p for r, permuting WHOLE CLUSTERS rather than rows.
 
     Returns `(p, floor)` where `floor` is the smallest p this many permutations
@@ -1053,7 +1105,11 @@ def permutation_p(pairs: list[tuple[float, float]], clusters: list[str] | None,
         if r is None:
             continue
         done += 1
-        if abs(r) >= abs(obs):
+        # CENTRED ON THE STATISTIC'S OWN NULL. A correlation has no association at 0, so the
+        # default compares magnitudes about 0; AUC has none at 0.5, and comparing |AUC| about 0
+        # would call every result extreme. `centre` is 0.0 for every method but roc_auc, so the
+        # behaviour of the existing ones is unchanged.
+        if abs(r - centre) >= abs(obs - centre):
             hits += 1
     if done < n_perm // 2:
         return None
@@ -1558,12 +1614,18 @@ def check(root: Path | str) -> dict:
         # answer and is nine percent of it. For a rank method this is the
         # variance of the RANKS, which is a different quantity from the
         # variance of the values, so the key says which was computed.
-        row["r_squared"] = round(r * r, 6)
-        row["r_squared_is_on"] = {"spearman": "ranks", "kendall": "tau-b"}.get(rel["method"], "values")
+        if rel["method"] == "roc_auc":
+            # AUC is a probability of correct ordering, not a correlation: its square is not a share
+            # of variance or of anything else, so it is left out rather than printed to be misread.
+            row["r_squared"] = None
+            row["r_squared_note"] = "not reported: AUC is a probability of correct ordering, not a correlation"
+        else:
+            row["r_squared"] = round(r * r, 6)
+            row["r_squared_is_on"] = {"spearman": "ranks", "kendall": "tau-b"}.get(rel["method"], "values")
         if rel["method"] == "kendall":
             # tau-b squared is not the variance of anything, so say so on the row rather than leave "R squared" to be read as one.
             row["r_squared_note"] = "tau-b squared, a squared rank correlation; not a share of variance"
-        pp = permutation_p(pairs, clusters, estimate=estimate)
+        pp = permutation_p(pairs, clusters, estimate=estimate, centre=0.5 if rel["method"] == "roc_auc" else 0.0)
         if pp is not None:
             p_val, p_floor = pp
             row |= {"p_value": round(p_val, 6), "p_floor": round(p_floor, 6),
