@@ -2,15 +2,51 @@
 
     python -m claimcheck.figures <project-dir> <out-dir>
 
-THE CANVAS CARRIES THE DATA AND NOTHING ELSE (2026-11-12): axes, axis labels with units, a legend only where there is more than
-one series, and a caption of at most two lines beneath, naming the claim, the files, the number of points, what one point is and
-every other mark drawn. No suptitle, no title, no text block, no background grid. Until that date the claim's statement, its
-result line and its data were a suptitle of up to a dozen lines, the verdict was a coloured title and the points took the
-verdict's colour; the project owner's reading was that the figures looked like machine output and not like a paper's.
+NO WORDS ON THE CANVAS BUT THE ONES THE DATA NEEDS (2026-11-13, project owner: the figures still looked weird, with too many
+lines and words at the bottom that belong in the caption). A claim figure carries the points, the two axis lines with their major
+ticks, the axis labels with units, the tick labels, and a key only where there is more than one series. Nothing else: no
+suptitle, no title, no on-canvas caption, no text block, no grid, no box frame, no minor ticks. Everything that was drawn
+beneath the axes until 2026-11-13, and the statement and verdict that were a suptitle until 2026-11-12, is in
+`<claim id>.commentary.md`, written beside the PNG by the same code.
 
-What a verdict needs in order to travel is still written, beside the figure and not on it: `<claim id>.commentary.md` holds the
-claim's id and statement (the first sentences of `evidence.source`), the estimate with its interval and the number of independent
-units it resamples, the claimed value and the verdict, p and R squared, and the rows and dataset the points came from.
+`<claim id>.commentary.md` holds the claim's id and statement (the first sentences of `evidence.source`), the estimate with its
+interval and the number of independent units it resamples, the claimed value and the verdict, p and R squared, the project and
+the dataset and files the points came from, and the caption: what one point is, how many there are, what the colours mean, every
+line that is drawn, and that no error bars are drawn.
+
+WHERE EACH RULE COMES FROM. Nature's research figure guide, quoted; a rule with no source says so.
+  - "Axis lines and tick marks to be included" and "All axes to be labelled with units in parentheses, e.g. Data (unit)"
+    (research-figure-guide.nature.com/figures/preparing-figures-our-specifications/): the left and bottom spines, their major
+    ticks and the tick labels stay, and every axis label carries its unit in parentheses.
+  - "We avoid Background gridlines ... Superfluous icons and other decorative elements ... Drop shadows ... Patterns ...
+    Overlapping text ... Coloured text; keylines, keys, etc. should be used instead" (same page): no grid, nothing decorative,
+    and no coloured word anywhere, so the verdict is not drawn.
+  - "Keys or keylines should be used in the figure wherever possible, rather than having colour descriptions in the figure
+    caption" (.../building-and-exporting-figure-panels/): where the points are coloured by resampling unit, the key on the
+    canvas names the units, and the commentary does not have to describe a colour.
+  - "The widths of printed figures are: 89 mm (single column) 183 mm (double column)" and "The maximum height for a Nature
+    figure is 170 mm, to allow space for the figure legend to fit underneath" (same page); "Maximum page dimensions are 180 mm
+    wide by 170 mm tall (170 mm to fit a legend underneath)" and "Figures should be sized so that they fit to a single page
+    (preferably leaving enough room for the legend to be set below, across two columns)" (.../extended-data-formatting-guidelines/). What Nature
+    calls the legend is what this package calls the caption: it is set BENEATH the artwork and is not part of it, which is why
+    the caption is now in the commentary. The canvas is 183 mm wide; its height, 120 mm, is our choice inside the 170 mm bound.
+  - "All text should be sans-serif typeface, preferably Helvetica or Arial and please use 7-pt text" and "Lines and strokes
+    should be set between 0.25 and 1 pt" (.../extended-data-formatting-guidelines/), with "Maximum text size: 7 pt" and
+    "Minimum text size: 5 pt" (.../preparing-figures-our-specifications/): text is 7 pt at the size the figure is read at, and
+    the y = x line is 0.6 pt. The 7 pt is a default for the rcParams keys a figstyle does not set, so a lab style still decides.
+  - "Separate panels in multi-panelled figures should be labelled with 8-pt bold, upright (not italic) and lowercase a, b, c,
+    etc." (same page): one claim is one panel, so no panel label is drawn.
+  - "high-resolution images supplied at 300 dpi or above" (same page): the PNG is written at 300 dpi, up from 130. The guide
+    asks for vector artwork wherever there are lines and text, which a PNG cannot be, so 300 dpi is the closest a raster comes
+    (our reading of the guide). It costs about four times the pixels of the 130 dpi canvas and little in bytes: the figures of
+    `tests/test_figures_default_look.py` are 91 to 94 kB, against 77 to 87 kB for the claim figures of `claimcheck-toy` drawn
+    at 130 dpi, which are different claims and so an indication and not a measurement of the same figure twice.
+  - OUR CHOICE, NO SOURCE: the top and right spines are not drawn, because they are not axis lines and carry no data; minor
+    ticks are off; the key has no frame; the points are one dark grey, or tab20 by resampling unit; the point sizes; the 120 mm
+    height; and `tight_layout(pad=0.4)`.
+  - NOT CHANGED, AND A DECISION FOR THE PROJECT OWNER: the guide asks for "An accessible colour palette to be used (for example
+    Wong, B. ...)". The unit colours are still matplotlib's tab20, which is not that palette and runs to twenty hues; Wong's has
+    eight. Choosing a palette, and with it the maximum number of units that may be coloured, is not a drawing decision.
 
 The points are rebuilt exactly as `claimcheck.relate` builds them (one dataset,
 or two joined on the declared key; rows usable for both columns, non-finite
@@ -18,15 +54,11 @@ values dropped), so the figure shows the population the number describes and
 not a neighbouring one. Points are coloured by resampling unit when there are
 at most twenty units, because a correlation over clustered rows is read by
 looking at the clusters. A claim that could not be measured (no data, no column,
-no unit) gets a figure too, empty axes with a caption saying so and the reason in
-its commentary: an absent figure reads as an oversight.
+no unit) gets a figure too, empty labelled axes, with the reason in its
+commentary: an absent figure reads as an oversight.
 
 Writes `<out-dir>/<claim id>.png`, `<out-dir>/<claim id>.commentary.md` and `<out-dir>/index.json` (claim id, verdict,
 figure path, commentary path). Needs matplotlib; nothing else in the package does.
-
-NOT DONE HERE, AND A DECISION FOR THE OWNER: the rule also asks for fonts of 5 to 7 pt at the size the figure is read at. The
-size of axis and tick labels is deliberately left to matplotlib's rcParams so that a shared style can set it (below), and the
-canvas is 8.6 inches wide. A lab `.mplstyle` with 7 pt fonts, and a narrower canvas, would complete the rule.
 
 A shared matplotlib style can be named so that figures from different projects look
 alike: `[project] figstyle = "<path to an .mplstyle>"` in context.toml (a relative path
@@ -34,9 +66,10 @@ is read from the directory holding context.toml), or the environment variable
 CLAIMCHECK_FIGSTYLE (a relative path is read from the working directory). The key wins
 over the variable. Each figure is drawn inside `matplotlib.style.context`, so the style
 reaches whatever `draw` leaves to matplotlib's rcParams: the font family, the sizes of
-tick and axis labels, spines, face and edge colours. It does not reach what `draw` sets
-itself: the point and unit colours, the sizes of the caption and legend,
-the figure size, the resolution and the absence of a grid. A path that does not exist, or cannot be
+text (7 pt where the style sets no size), the width of the axis lines, face and edge
+colours. It does not reach what `draw` sets itself: the point and unit colours, the
+figure size, the resolution, the absence of a grid, of the top and right spines, of
+minor ticks and of a frame around the key. A path that does not exist, or cannot be
 read as a style, prints one warning and the figures are drawn as they are without a
 style. With neither set no style is loaded or entered and the output is what it was
 before styles existed. When a style is applied, `index.json` names it (`figstyle`) with
@@ -53,7 +86,6 @@ import math
 import os
 import re
 import sys
-import textwrap
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -62,10 +94,18 @@ from claimcheck.datasets import DatasetError, join
 from claimcheck.datasets import load as load_dataset
 from claimcheck.relate import _paired, _ref
 
+MM = 1.0 / 25.4                             # inches per millimetre; the guide states every size in millimetres
 POINT_COLOUR = "#333333"                    # one colour for one series; the verdict is not drawn, so no colour encodes it
-CAPTION_PT = 7                              # the caption beneath the axes, in points
+FIG_W_IN = 183 * MM                         # "The widths of printed figures are: 89 mm (single column) 183 mm (double column)"
+FIG_H_IN = 120 * MM                         # our choice, no source, inside "The maximum height for a Nature figure is 170 mm"
+DPI = 300                                   # "high-resolution images supplied at 300 dpi or above"
+TEXT_PT = 7.0                               # "please use 7-pt text", between the stated minimum of 5 pt and maximum of 7 pt
+LINE_PT = 0.6                               # the y = x line; "Lines and strokes should be set between 0.25 and 1 pt"
+PAD_IN = 0.4                                # tight_layout's margin, in font-size units; our choice, no source
+#: Text sizes applied only where a figstyle sets nothing, so a lab style still decides. `font.size` carries the relative sizes
+#: ("medium" for axis labels, tick labels and the key), so one key is enough and a style setting any of them still wins.
+TEXT_RC = {"font.size": TEXT_PT}
 MAX_UNIT_COLOURS = 20
-WRAP = 118
 STYLE_KEY = "figstyle"                      # in [project] of context.toml
 STYLE_ENV = "CLAIMCHECK_FIGSTYLE"           # the same, from the environment; the key wins
 
@@ -114,45 +154,81 @@ def result_line(claim: dict) -> str:
             f"{claim.get('why', '')}")
 
 
-def data_line(claim: dict, files: dict[str, list[str]]) -> str:
+def data_line(claim: dict, files: dict[str, list[str]], project: str = "") -> str:
+    """The system the points come from: the project, the rows kept and dropped, the verification level, the datasets and files."""
     ds = sorted({claim.get("x_dataset"), claim.get("y_dataset")} - {None})
     where = "; ".join(f"{d}: {', '.join(files.get(d, []))}" for d in ds)
     rows = claim.get("n_rows")
     drop = claim.get("dropped")
     lvl = claim.get("level")
     head = f"{rows} rows" + (f" ({drop} dropped)" if drop else "") if rows is not None else "no rows"
-    return f"{head}, level {lvl}; data {where}" if lvl else f"{head}; data {where}"
+    line = f"{head}, level {lvl}; data {where}" if lvl else f"{head}; data {where}"
+    return f"System {project}; {line}" if project else line
 
 
-def commentary(claim: dict, files: dict[str, list[str]]) -> str:
-    """The companion text of a claim figure, written beside it as `<id>.commentary.md`: the claim's id, its statement, the result
-    line (estimate, interval, units, claimed value, verdict, p, R squared, the checker's reason) and the rows and files the points
-    came from. Until 2026-11-12 this was drawn on the canvas as a suptitle; it is everything a caption has no room for."""
-    return "\n\n".join([f"# {claim.get('id')}", statement(claim), result_line(claim), data_line(claim, files)]) + "\n"
+def axis_label(claim: dict, side: str, fallback: str) -> str:
+    """One axis label as it is drawn: the column, and its unit in parentheses.
+
+    "All axes to be labelled with units in parentheses, e.g. Data (unit)"
+    (research-figure-guide.nature.com/figures/preparing-figures-our-specifications/). A column whose variable declares no unit
+    says so, because a missing unit makes the claim unverifiable and the figure should not hide it.
+    """
+    return f"{claim.get(side, fallback)} ({claim.get(f'{side}_unit') or 'unit not declared'})"
 
 
-def caption(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: list[str] | None = None,
-            identity_line: bool = False) -> str:
-    """The caption drawn BENEATH the axes, at most two lines: the claim id, the data files, how many points, what one point is,
-    and every other mark that is drawn (the colours, the y = x line). No statement, no verdict and no statistics: those are in the
-    companion `<id>.commentary.md` (`commentary`). The data does the work on the canvas; the caption says what the marks are."""
-    cid = str(claim.get("id"))
-    if not n_points:
-        return f"{cid}: no points could be drawn; the reason is in {cid}.commentary.md."
+def identity_drawn(claim: dict, pairs: list) -> bool:
+    """Whether the y = x line belongs on this figure: there are points, both columns declare the same unit, and they are not the
+    same column. A `kind = "value"` claim declares `x = y`, where y = x runs through every point and carries no information."""
+    return (bool(pairs) and bool(claim.get("x_unit")) and claim.get("x_unit") == claim.get("y_unit")
+            and str(claim.get("x")) != str(claim.get("y")))
+
+
+def marks(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: list[str] | None = None,
+          identity_line: bool = False, x: str = "", y: str = "") -> str:
+    """The caption: what one point is, how many there are, what each colour and each line means, and that no error bars are drawn.
+
+    IT IS WRITTEN INTO THE COMMENTARY AND NEVER ON THE CANVAS (2026-11-13, project owner: "no words at the bottom that should be
+    in the caption"). What Nature calls the figure legend is "set below" the artwork, outside it, which is why the page allowance
+    is "180 mm wide by 170 mm tall (170 mm to fit a legend underneath)"
+    (research-figure-guide.nature.com/figures/extended-data-formatting-guidelines/). Until 2026-11-13 these sentences were drawn
+    beneath the axes at 7 pt and the figure was made taller to hold them.
+
+    The text describes only what `figure` draws, from the same two helpers (`axis_label`, `identity_drawn`), so a mark cannot be
+    defined here and left undrawn, or drawn and left undefined.
+    """
     ds = sorted({str(d) for d in (claim.get("x_dataset"), claim.get("y_dataset")) if d is not None})
+    where = "; ".join(", ".join(files.get(d, [])) for d in ds if files.get(d)) or ", ".join(ds)
+    axes = f"The canvas: x axis {axis_label(claim, 'x', x)}, y axis {axis_label(claim, 'y', y)}."
+    if not n_points:
+        why = claim.get("why") or "the pairs could not be formed"
+        return (f"{axes} No points could be drawn, so the axes are empty and labelled: {why}. An absent figure would read as an "
+                "oversight, so the figure is written.")
     unit = claim.get("resampling_unit")
     n_units = len(set(units)) if units else None
-    marks = "One point is one row"
-    if n_units and 1 < n_units <= MAX_UNIT_COLOURS:
-        marks += f", coloured by {unit}"
-    marks += "." + (" The line is y = x." if identity_line else "")
-    size = f"{n_points} rows" + (f", {n_units} {unit}(s)" if n_units and unit else "")
-    for where in ("; ".join(", ".join(files.get(d, [])) for d in ds if files.get(d)), ", ".join(str(d) for d in ds), ""):
-        text = f"{cid}: " + (f"{where}; " if where else "") + f"{size}. {marks}"
-        lines = textwrap.wrap(text, WRAP)
-        if len(lines) <= 2:
-            return "\n".join(lines)
-    return "\n".join(textwrap.wrap(text, WRAP, max_lines=2, placeholder=" ..."))
+    out = [axes, f"{n_points} points from {where or 'the declared files'}; one point is one row."]
+    if unit and n_units and 1 < n_units <= MAX_UNIT_COLOURS:
+        out.append(f"{n_units} {unit}(s), one colour per {unit}, each named in the key (matplotlib tab20).")
+    elif unit and n_units:
+        out.append(f"{n_units} {unit}(s), all points one colour, because more than {MAX_UNIT_COLOURS} colours cannot be read.")
+    if identity_line:
+        out.append(f"The straight line is y = x, at {LINE_PT} pt; both columns are in {claim.get('x_unit')}.")
+    else:
+        out.append("No reference line is drawn.")
+    # The interval's kind is not named here: it is a bootstrap for most methods, Clopper-Pearson for binomial_count and
+    # topn_recovery and a chi-square interval for pooled_sd, and the result line above already says which one and over what.
+    out.append("No error bars are drawn: the interval in the result line above belongs to the claim, not to a point."
+               if claim.get("ci_lo") is not None else "No error bars are drawn, and the result line above has no interval.")
+    return " ".join(out)
+
+
+def commentary(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: list[str] | None = None,
+               identity_line: bool = False, project: str = "", x: str = "", y: str = "") -> str:
+    """The companion text of a claim figure, written beside it as `<id>.commentary.md`: the claim's id, its statement, the result
+    line (estimate, interval, units, claimed value, verdict, p, R squared, the checker's reason), the system the points came from
+    and the caption (`marks`). The canvas carries none of it: the statement and verdict stopped being a suptitle on 2026-11-12
+    and the caption stopped being drawn beneath the axes on 2026-11-13."""
+    return "\n\n".join([f"# {claim.get('id')}", statement(claim), result_line(claim), data_line(claim, files, project),
+                        marks(claim, files, n_points, units, identity_line, x, y)]) + "\n"
 
 
 def pairs_for(root: Path, ctx: dict, claim: dict, sets: dict) -> tuple[list[tuple[float, float]], list[str] | None, str, str]:
@@ -180,59 +256,69 @@ def pairs_for(root: Path, ctx: dict, claim: dict, sets: dict) -> tuple[list[tupl
     return pairs, clusters, x, y
 
 
-def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]]):
+def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]], set_by_style: frozenset[str] = frozenset()):
     """The matplotlib Figure of one claim, not yet saved or closed.
 
-    THE LAYOUT (2026-11-12): axes, axis labels with units, a legend only where there is more than one series, and a caption of at
-    most two lines beneath. Nothing else is on the canvas: no suptitle, no title, no text block, no background grid. Until that date
-    the figure carried the claim's statement, result and data as a suptitle of up to a dozen lines, the verdict word as a title, a
-    grid, and, for a claim with no points, a paragraph in the middle of an empty canvas. All of that text is now in the companion
-    `<id>.commentary.md`.
+    THE LAYOUT (2026-11-13): the points, two axis lines with their major ticks and tick labels, an axis label with its unit on
+    each, and a key only where there is more than one series. There is no text anywhere else: no suptitle, no title, no caption
+    beneath the axes, no annotation, no grid, no box frame and no minor ticks. Until 2026-11-12 the claim's statement, result and
+    data were a suptitle of up to a dozen lines and the verdict a coloured title; until 2026-11-13 a caption of up to two lines
+    was drawn beneath the axes. All of it is in `<id>.commentary.md` (`commentary`, `marks`).
 
-    Every mark is defined. Points are one colour unless they are coloured by resampling unit, and then the legend names each unit;
-    the colour no longer encodes the verdict, which the canvas does not state. The y = x line is drawn only when both columns
-    declare the same unit and is named in the caption. A claim with no points gets empty axes with their labels and a caption
-    saying so, so that an absent figure is never read as an oversight."""
+    What has a source, and what does not, is in the module docstring. In short: axis lines, their major ticks and the units in the
+    labels are required by the guide, and the grid, the decorative elements and coloured text are the guide's "We avoid" list.
+    Dropping the top and right spines, the minor ticks and the frame of the key is our choice, no source: none of them is an axis
+    line and none carries data. Text is 7 pt and the y = x line 0.6 pt, both inside the guide's ranges.
+
+    Every mark is defined in the commentary, from the same helpers that decide to draw it. Points are one colour unless they are
+    coloured by resampling unit, and then the key names each unit; no colour encodes the verdict, which the canvas does not state.
+    A claim with no points gets its labelled, empty axes, so that an absent figure is never read as an oversight.
+
+    `set_by_style` names the rcParams keys an active figstyle sets. Those are left alone; the rest take `TEXT_RC`, so the text is
+    7 pt at the size the figure is read at unless a lab style has decided otherwise.
+    """
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    identity = bool(pairs) and bool(claim.get("x_unit")) and claim.get("x_unit") == claim.get("y_unit")
-    cap = caption(claim, files, len(pairs), clusters, identity)
-    n_lines = cap.count("\n") + 1
-    line_in = CAPTION_PT * 1.3 / 72                               # one caption line with line spacing 1.3, in inches
-    cap_in = n_lines * line_in + 0.16
-    fig_h = 5.2 + cap_in
-    fig, ax = plt.subplots(figsize=(8.6, fig_h))
-    if pairs:
-        xs = [a for a, _ in pairs]
-        ys = [b for _, b in pairs]
-        labels = sorted(set(clusters)) if clusters else []
-        if clusters and 1 < len(labels) <= MAX_UNIT_COLOURS:
-            cmap = plt.get_cmap("tab20")
-            for i, lab in enumerate(labels):
-                sel = [k for k, c in enumerate(clusters) if c == lab]
-                ax.plot([xs[k] for k in sel], [ys[k] for k in sel], "o", ms=4, alpha=0.8, color=cmap(i % 20), label=lab)
-            ax.legend(fontsize=6, ncol=2, title=claim.get("resampling_unit"), title_fontsize=7, loc="best")
-        else:
-            ax.plot(xs, ys, "o", ms=3 if len(xs) > 200 else 5, alpha=0.35 if len(xs) > 200 else 0.8, color=POINT_COLOUR)
-        if identity:
-            lo, hi = min(min(xs), min(ys)), max(max(xs), max(ys))
-            ax.plot([lo, hi], [lo, hi], "k-", lw=0.6)
-    ax.set_xlabel(f"{claim.get('x', x)} ({claim.get('x_unit') or 'unit not declared'})")
-    ax.set_ylabel(f"{claim.get('y', y)} ({claim.get('y_unit') or 'unit not declared'})")
-    ax.grid(False)
-    fig.tight_layout(rect=(0, cap_in / fig_h, 1, 1))              # the axes above, the caption strip beneath
-    fig.text(0.02, 0.08 / fig_h, cap, fontsize=CAPTION_PT, ha="left", va="bottom", color="k", linespacing=1.3)
+    identity = identity_drawn(claim, pairs)
+    with matplotlib.rc_context({k: v for k, v in TEXT_RC.items() if k not in set_by_style}):
+        fig, ax = plt.subplots(figsize=(FIG_W_IN, FIG_H_IN))
+        if pairs:
+            xs = [a for a, _ in pairs]
+            ys = [b for _, b in pairs]
+            labels = sorted(set(clusters)) if clusters else []
+            if clusters and 1 < len(labels) <= MAX_UNIT_COLOURS:
+                cmap = plt.get_cmap("tab20")
+                for i, lab in enumerate(labels):
+                    sel = [k for k, c in enumerate(clusters) if c == lab]
+                    ax.plot([xs[k] for k in sel], [ys[k] for k in sel], "o", ms=4, alpha=0.8, color=cmap(i % 20), label=lab)
+                # the key, which the guide asks for in place of a colour description; its frame is a line carrying no data, so
+                # frameon=False (our choice, no source). Its sizes come from rcParams, so a figstyle reaches them.
+                ax.legend(ncol=2, title=claim.get("resampling_unit"), loc="best", frameon=False)
+            else:
+                ax.plot(xs, ys, "o", ms=3 if len(xs) > 200 else 5, alpha=0.35 if len(xs) > 200 else 0.8, color=POINT_COLOUR)
+            if identity:
+                lo, hi = min(min(xs), min(ys)), max(max(xs), max(ys))
+                ax.plot([lo, hi], [lo, hi], "k-", lw=LINE_PT)
+        ax.set_xlabel(axis_label(claim, "x", x))
+        ax.set_ylabel(axis_label(claim, "y", y))
+        ax.grid(False)                                            # the guide's "We avoid": "Background gridlines"
+        for side in ("top", "right"):                             # our choice, no source: not axis lines, and no data on them
+            ax.spines[side].set_visible(False)
+        ax.minorticks_off()                                       # our choice, no source: tick marks with no tick label
+        ax.tick_params(which="both", top=False, right=False)      # ticks on the two axis lines only (our choice, no source)
+        fig.tight_layout(pad=PAD_IN)
     return fig
 
 
-def draw(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]], out: Path) -> None:
-    fig = figure(claim, pairs, clusters, x, y, files)             # selects the Agg backend before pyplot is used
+def draw(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]], out: Path,
+         set_by_style: frozenset[str] = frozenset()) -> None:
+    fig = figure(claim, pairs, clusters, x, y, files, set_by_style)   # selects the Agg backend before pyplot is used
     import matplotlib.pyplot as plt
 
-    fig.savefig(out, dpi=130)
+    fig.savefig(out, dpi=DPI)
     plt.close(fig)
 
 
@@ -292,6 +378,8 @@ def build(root: Path | str, out_dir: Path | str) -> list[dict]:
     ctx = tomllib.loads((root / "context.toml").read_text())
     verdicts = json.loads((root / "results" / "claims.json").read_text())
     files = {d["id"]: list(d.get("files", [])) for d in ctx.get("datasets", [])}
+    proj = ctx.get("project") or {}
+    project = str(proj.get("name") or proj.get("title") or verdicts.get("project") or "")   # the system, for the commentary
     sets = {}
     for d in ctx.get("datasets", []):
         try:
@@ -311,9 +399,10 @@ def build(root: Path | str, out_dir: Path | str) -> list[dict]:
             pairs, clusters, x, y = [], None, str(claim.get("x")), str(claim.get("y"))
         path = out_dir / f"{claim['id']}.png"
         with _styled(params):
-            draw(claim, pairs, clusters, x, y, files, path)
+            draw(claim, pairs, clusters, x, y, files, path, frozenset(params or ()))
         note = out_dir / f"{claim['id']}.commentary.md"
-        note.write_text(commentary(claim, files))                 # what the canvas no longer carries: statement, result, verdict, data
+        # what the canvas does not carry: the statement, the result, the verdict, the system, and the caption
+        note.write_text(commentary(claim, files, len(pairs), clusters, identity_drawn(claim, pairs), project, x, y))
 
         def rel(p: Path) -> str:
             return str(p.relative_to(root)) if p.is_relative_to(root) else str(p)

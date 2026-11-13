@@ -1,5 +1,5 @@
-"""claimcheck.figures: one figure per claim, the points are the pairs relate used, the canvas carries the data and a two-line caption,
-and the claim, its result and its verdict are in the commentary beside it."""
+"""claimcheck.figures: one figure per claim, the points are the pairs relate used, the canvas carries the data and no words beyond
+its axis labels, tick labels and key, and the claim, its result, its verdict and its caption are in the commentary beside it."""
 from __future__ import annotations
 
 import json
@@ -10,6 +10,7 @@ import pytest
 
 pytest.importorskip("matplotlib")
 
+from _figproject import text_artists  # noqa: E402
 from claimcheck import figures  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
@@ -21,7 +22,7 @@ def test_commentary_states_the_claim_the_interval_and_the_verdict():
          "resampling_unit": "target", "p_value": 0.0018, "r_squared": 0.26, "claimed": 0.0, "verdict": "refuted", "ci_level": 0.95,
          "evidence": {"source": "Heavy atoms rank the ligands. A second sentence. A third one that is left out."}, "n_rows": 350,
          "x_dataset": "d", "y_dataset": "d", "level": "reference"}
-    cap = figures.commentary(c, {"d": ["data/d.csv"]})
+    cap = figures.commentary(c, {"d": ["data/d.csv"]}, 350, ["t1"] * 350)
     assert cap.splitlines()[0] == "# A1_x"
     assert "Heavy atoms rank the ligands. A second sentence." in cap and "third" not in cap
     assert "[+0.200, +0.700] over 13 target(s)" in cap and "REFUTED" in cap and "claimed +0.00" in cap
@@ -38,7 +39,7 @@ def test_an_estimate_without_an_interval_gives_the_reason():
 def test_an_unmeasured_claim_says_why():
     c = {"id": "B", "x": "d.a", "y": "d.b", "verdict": "unverifiable", "why": "the data has no column b"}
     assert "UNVERIFIABLE: the data has no column b" in figures.commentary(c, {})
-    assert figures.caption(c, {}) == "B: no points could be drawn; the reason is in B.commentary.md."
+    assert "No points could be drawn, so the axes are empty and labelled: the data has no column b." in figures.marks(c, {})
 
 
 @pytest.mark.skipif(not (TOY / "results" / "claims.json").exists(), reason="the toy project has no verdicts")
@@ -61,7 +62,12 @@ def test_a_refutation_by_a_hair_prints_the_hair():
     assert "r - claimed = -2.00e-05" in line and "claimed 1.0 lies outside" in line
 
 
-# ── the layout, 2026-11-12: axes, labels, a legend only for several series, a caption beneath, nothing else ──
+# ── the layout, 2026-11-13: the points, two axis lines, the labels, a key where there is more than one series, no words else ──
+#
+# The project owner's reading on 2026-11-13 was that the figures still looked weird: too many lines, and words at the bottom
+# that belong in the caption. The contract since then, with Nature's research figure guide as the source for each part, is in
+# the docstring of claimcheck/figures.py. These tests hold both halves of it: nothing else is drawn, and everything that was
+# drawn is now in the commentary.
 
 def _claim(**extra) -> dict:
     return {"id": "L1_look", "x": "d.a", "y": "d.b", "x_unit": "kcal/mol", "y_unit": "kcal/mol", "method": "pearson", "estimate": 0.9,
@@ -69,64 +75,163 @@ def _claim(**extra) -> dict:
             "x_dataset": "d", "y_dataset": "d", "evidence": {"source": "A long statement that used to be drawn on the canvas."}} | extra
 
 
-def _draw(claim, pairs, clusters):
-    import matplotlib.pyplot as plt
-    fig = figures.figure(claim, pairs, clusters, "a", "b", {"d": ["data/d.csv"]})
+PAIRS = [(float(i), float(i) + 0.3 * (-1) ** i) for i in range(12)]
+BY_UNIT = [f"L{i // 2}" for i in range(12)]
+MANY_PAIRS = [(float(i), float(i) + 0.5) for i in range(25)]      # more units than MAX_UNIT_COLOURS, so one colour and no key
+FILES = {"d": ["data/d.csv"]}
+#: name -> (claim, pairs, cluster labels): one case per branch of `figures.figure`, the value claim among them.
+CASES = {
+    "one series": (_claim(), PAIRS, None),
+    "coloured by unit": (_claim(), PAIRS, BY_UNIT),
+    "many units": (_claim(resampling_unit="row"), MANY_PAIRS, [f"r{i}" for i in range(len(MANY_PAIRS))]),
+    "value claim": (_claim(kind="value", method="mean", y="d.a", y_unit="kcal/mol"), PAIRS, BY_UNIT),
+    "no points": (_claim(verdict="unverifiable", why="the data has no column b", estimate=None), [], None),
+}
+
+
+def _drawn(claim, pairs, clusters):
+    """The Figure of one claim, drawn so that its tick labels exist; the caller closes it."""
+    fig = figures.figure(claim, pairs, clusters, "a", "b", FILES)
     fig.canvas.draw()
+    return fig
+
+
+def _look(claim, pairs, clusters) -> dict:
+    """What is on the canvas: every text artist, the chrome, the lines and their widths, the sizes."""
+    import matplotlib.pyplot as plt
+
+    fig = _drawn(claim, pairs, clusters)
     ax = fig.axes[0]
-    look = {"suptitle": fig._suptitle, "titles": [ax.get_title(loc=loc) for loc in ("left", "center", "right")],
-            "axes_texts": [t.get_text() for t in ax.texts], "fig_texts": [t for t in fig.texts], "n_axes": len(fig.axes),
+    drawn_lines = [ln for ln in ax.lines if ln.get_linestyle() not in ("None", "none", "")]
+    look = {"texts": text_artists(fig), "suptitle": fig._suptitle, "titles": [ax.get_title(loc=loc) for loc in ("left", "center", "right")],
+            "axes_texts": [t.get_text() for t in ax.texts], "fig_texts": [t.get_text() for t in fig.texts], "n_axes": len(fig.axes),
             "grid": any(line.get_visible() for line in ax.get_xgridlines() + ax.get_ygridlines()), "legend": ax.get_legend(),
-            "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "n_lines": len(ax.lines),
-            "caption_top": max(t.get_window_extent().y1 for t in fig.texts), "axes_bottom": ax.get_tightbbox().y0}
+            "xlabel": ax.get_xlabel(), "ylabel": ax.get_ylabel(), "n_series": len(ax.lines) - len(drawn_lines),
+            "n_reference_lines": len(drawn_lines),
+            "spines": {s: ax.spines[s].get_visible() for s in ("left", "bottom", "top", "right")},
+            "n_minor_ticks": len(ax.xaxis.get_minor_ticks()) + len(ax.yaxis.get_minor_ticks()),
+            "line_widths": sorted({ln.get_linewidth() for ln in drawn_lines}
+                                  | {ax.spines[s].get_linewidth() for s in ("left", "bottom")}),
+            "label_pt": ax.xaxis.label.get_fontsize(), "tick_pt": {t.get_fontsize() for t in ax.get_xticklabels() if t.get_text()},
+            "size_mm": tuple(round(v * 25.4) for v in fig.get_size_inches())}
     plt.close(fig)
     return look
 
 
-PAIRS = [(float(i), float(i) + 0.3 * (-1) ** i) for i in range(12)]
+# ── no words on the canvas: the regression test, with its failing twin ──
+
+@pytest.mark.parametrize("case", list(CASES))
+def test_the_only_words_on_a_claim_figure_are_the_axis_labels_the_tick_labels_and_the_key(case):
+    """The canvas carries no text but the axis labels, the tick labels and the key (its entries and its title, which names the
+    resampling unit the colours stand for). `text_artists` reports anything else, and the twin below plants one of each kind to
+    show that it does."""
+    look = _look(*CASES[case])
+    assert look["texts"]["extra"] == [], f"{case}: words on the canvas that the contract does not allow"
+    assert look["texts"]["allowed"], f"{case}: the auditor sees no text at all, so the empty list above proves nothing"
+    assert look["suptitle"] is None and look["titles"] == ["", "", ""]
+    assert look["axes_texts"] == [] and look["fig_texts"] == []                 # no annotation, and no caption beneath the axes
+    assert look["n_axes"] == 1 and not look["grid"]
+    assert look["xlabel"] == "d.a (kcal/mol)" and look["ylabel"].endswith("(kcal/mol)")
 
 
-@pytest.mark.parametrize("clusters", [None, [f"L{i // 2}" for i in range(12)]], ids=["one series", "coloured by unit"])
-def test_the_canvas_has_no_suptitle_no_title_no_text_block_and_no_grid(clusters):
-    look = _draw(_claim(), PAIRS, clusters)
-    assert look["suptitle"] is None and look["titles"] == ["", "", ""] and look["axes_texts"] == [] and not look["grid"]
-    assert look["n_axes"] == 1 and len(look["fig_texts"]) == 1                 # the caption is the only text outside the axes
-    assert look["xlabel"] == "d.a (kcal/mol)" and look["ylabel"] == "d.b (kcal/mol)"
+@pytest.mark.parametrize("plant", ["caption beneath the axes", "suptitle", "title", "text in the axes", "annotation"])
+def test_a_word_put_back_on_the_canvas_is_caught(plant):
+    """The failing half: one text artist of each kind that used to be drawn, planted on a figure that is otherwise right."""
+    import matplotlib.pyplot as plt
+
+    fig = _drawn(*CASES["coloured by unit"])
+    ax = fig.axes[0]
+    word = f"a {plant} that must not be on the canvas"
+    if plant == "caption beneath the axes":
+        fig.text(0.02, 0.01, word)
+    elif plant == "suptitle":
+        fig.suptitle(word)
+    elif plant == "title":
+        ax.set_title(word)
+    elif plant == "text in the axes":
+        ax.text(1.0, 1.0, word)
+    else:
+        ax.annotate(word, (1.0, 1.0), xytext=(2.0, 2.0), arrowprops={"width": 0.5})
+    fig.canvas.draw()
+    assert text_artists(fig)["extra"] == [word], f"a {plant} is not reported"
+    plt.close(fig)
 
 
-def test_the_caption_is_beneath_the_axes_at_most_two_lines_and_defines_every_mark():
-    by_unit = [f"L{i // 2}" for i in range(12)]
-    look = _draw(_claim(), PAIRS, by_unit)
-    cap = look["fig_texts"][0].get_text()
-    assert look["caption_top"] <= look["axes_bottom"]                          # beneath: no overlap with the axes or their labels
-    assert 1 <= len(cap.splitlines()) <= 2 and look["fig_texts"][0].get_fontsize() == 7
-    assert cap.startswith("L1_look: data/d.csv; 12 rows, 6 ligand(s).")
-    assert "One point is one row, coloured by ligand." in cap and "The line is y = x." in cap
-    for absent in ("AGREES", "agrees", "claimed", "CI", "statement"):          # the result is in the commentary, not here
-        assert absent not in cap
-    assert "AGREES" in figures.commentary(_claim(), {"d": ["data/d.csv"]})
-    # a long list of files falls back to the dataset id and never to a third line
-    long = figures.caption(_claim(), {"d": [f"data/a_very_long_directory_name/table_number_{i}.csv" for i in range(8)]}, 12, by_unit, True)
-    assert len(long.splitlines()) <= 2 and long.startswith("L1_look: d; 12 rows")
+# ── the caption, which is now in the commentary ──
+
+def test_the_caption_is_in_the_commentary_and_names_the_system_the_cohort_the_point_and_the_error_bars():
+    note = figures.commentary(_claim(), FILES, 12, BY_UNIT, True, project="figure_tests")
+    assert "System figure_tests" in note and "data/d.csv" in note and "60 rows" not in note
+    assert "12 points from data/d.csv; one point is one row." in note
+    assert "6 ligand(s), one colour per ligand, each named in the key" in note
+    assert "The straight line is y = x, at 0.6 pt" in note
+    assert "No error bars are drawn: the interval in the result line above belongs to the claim, not to a point." in note
+    assert "The canvas: x axis d.a (kcal/mol), y axis d.b (kcal/mol)." in note
+    assert "AGREES" in note and "claimed +0.90" in note                        # the verdict too, which the canvas does not state
+    assert not _look(*CASES["coloured by unit"])["fig_texts"]                   # and none of it is drawn
 
 
-def test_a_legend_only_where_there_is_more_than_one_series_and_no_line_without_a_definition():
-    one = _draw(_claim(), PAIRS, None)
-    several = _draw(_claim(), PAIRS, [f"L{i // 2}" for i in range(12)])
+def test_the_commentary_does_not_promise_an_interval_a_claim_does_not_have():
+    """`relate` writes no interval for an unmeasured claim, and several methods do not use a bootstrap (Clopper-Pearson for
+    binomial_count and topn_recovery, chi-square for pooled_sd), so the caption names no kind of interval and no unit count."""
+    note = figures.commentary(_claim(ci_lo=None, ci_hi=None, estimate=None, n_units=None), FILES, 12, BY_UNIT, True)
+    assert "No error bars are drawn, and the result line above has no interval." in note
+    assert "bootstrap" not in note and "?" not in note
+
+
+def test_the_commentary_states_a_missing_unit_the_way_the_axis_label_does():
+    note = figures.commentary(_claim(y_unit=None), FILES, 12, None, False)
+    assert "y axis d.b (unit not declared)" in note and "No reference line is drawn." in note
+    assert _look(_claim(y_unit=None), PAIRS, None)["ylabel"] == "d.b (unit not declared)"
+
+
+# ── the chrome: two axis lines with their ticks, and no other line ──
+
+def test_the_axis_lines_and_their_major_ticks_stay_and_the_box_frame_and_minor_ticks_go():
+    look = _look(*CASES["one series"])
+    assert look["spines"] == {"left": True, "bottom": True, "top": False, "right": False}
+    assert look["n_minor_ticks"] == 0
+    assert look["tick_pt"] and look["label_pt"] == 7.0 and look["tick_pt"] == {7.0}      # 7-pt text at the size it is read at
+    assert look["size_mm"] == (183, 120)                                                 # Nature's double-column width
+    assert all(0.25 <= w <= 1.0 for w in look["line_widths"]), look["line_widths"]       # the guide's range for lines
+
+
+def test_a_key_only_where_there_is_more_than_one_series_and_it_has_no_frame():
+    one, several = _look(*CASES["one series"]), _look(*CASES["coloured by unit"])
     assert one["legend"] is None and several["legend"] is not None
     assert sorted(t.get_text() for t in several["legend"].get_texts()) == [f"L{i}" for i in range(6)]
-    assert one["n_lines"] == 2 and "The line is y = x." in one["fig_texts"][0].get_text()      # the points and y = x, which the caption names
-    no_identity = _draw(_claim(y_unit="pKd"), PAIRS, None)
-    assert no_identity["n_lines"] == 1 and "y = x" not in no_identity["fig_texts"][0].get_text()
-    assert "coloured" not in one["fig_texts"][0].get_text()
+    assert several["legend"].get_title().get_text() == "ligand" and not several["legend"].get_frame_on()
+    assert _look(*CASES["many units"])["legend"] is None                      # more colours than can be read: one colour, no key
 
 
-def test_a_claim_with_no_points_gets_empty_axes_and_a_caption_and_no_paragraph_on_the_canvas():
-    c = _claim(verdict="unverifiable", why="the data has no column b", estimate=None)
-    look = _draw(c, [], None)
-    assert look["axes_texts"] == [] and look["suptitle"] is None and look["n_lines"] == 0
-    assert look["fig_texts"][0].get_text() == "L1_look: no points could be drawn; the reason is in L1_look.commentary.md."
-    assert "the data has no column b" in figures.commentary(c, {})
+def test_a_line_is_drawn_exactly_where_the_commentary_says_one_is():
+    for case, (claim, pairs, clusters) in CASES.items():
+        look = _look(claim, pairs, clusters)
+        identity = figures.identity_drawn(claim, pairs)
+        note = figures.marks(claim, FILES, len(pairs), clusters, identity)
+        assert look["n_reference_lines"] == (1 if identity else 0), case
+        if pairs:
+            assert ("The straight line is y = x" in note) is identity, case
+            assert ("No reference line is drawn." in note) is (not identity), case
+        else:
+            assert "No points could be drawn" in note and "y = x" not in note, case
+
+
+def test_a_value_claim_gets_no_y_equals_x_line_through_points_that_all_lie_on_it():
+    """`kind = "value"` declares x = y, one column against itself: the line would pass through every point and say nothing."""
+    claim, pairs, clusters = CASES["value claim"]
+    assert not figures.identity_drawn(claim, pairs) and _look(claim, pairs, clusters)["n_reference_lines"] == 0
+    assert figures.identity_drawn(_claim(), pairs), "two columns in one unit still get the line, so the test above means something"
+
+
+def test_a_claim_with_no_points_gets_its_labelled_axes_and_no_words_and_the_reason_is_in_the_commentary():
+    claim, pairs, clusters = CASES["no points"]
+    look = _look(claim, pairs, clusters)
+    assert look["n_series"] == 0 and look["n_reference_lines"] == 0 and look["legend"] is None and look["texts"]["extra"] == []
+    assert look["xlabel"] == "d.a (kcal/mol)" and look["spines"]["left"]
+    note = figures.commentary(claim, {}, 0, None, False)
+    assert "No points could be drawn, so the axes are empty and labelled: the data has no column b." in note
+    assert "an oversight" in note and "UNVERIFIABLE" in note
 
 
 def test_build_writes_the_commentary_beside_each_figure_and_indexes_it(tmp_path):
@@ -141,3 +246,6 @@ def test_build_writes_the_commentary_beside_each_figure_and_indexes_it(tmp_path)
         text = (proj / r["commentary"]).read_text()
         assert r["commentary"] == f"figures/claims/{r['id']}.commentary.md" and text.startswith(f"# {r['id']}\n")
         assert str(r["verdict"]).upper() in text
+        assert "The canvas: x axis " in text and "System " in text            # the caption, with the system it is drawn from
+        assert ("points from" in text) is (r["n_points"] > 0)
+        assert ("No error bars are drawn" in text) is (r["n_points"] > 0)

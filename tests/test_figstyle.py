@@ -5,8 +5,9 @@ directory; an unusable path prints one warning and the figures are drawn as if n
 while each figure is drawn and not after; with no style `matplotlib.style` is never entered; an empty style changes nothing; and a missing matplotlib still
 warns, exits 0 and leaves the verdicts alone. The stored figures drawn before the hook existed are in `test_figures_default_look.py`.
 
-What a style does NOT reach is also true and is not tested here: `figures.draw` passes the verdict colours, the unit colours, the sizes of the caption, verdict
-word and legend, the figure size, `dpi` and the grid itself, so rcParams cannot change them (see the module docstring of claimcheck.figures).
+What a style does NOT reach is also true and is not tested here: `figures.figure` sets the point and unit colours, the figure size, `dpi`, the absence of a grid,
+of the top and right spines, of minor ticks and of a frame around the key, so rcParams cannot change them (see the module docstring of claimcheck.figures).
+Text is the other way round: since 2026-11-13 `figure` applies 7 pt only to the rcParams keys the active style does not set, so a style still decides the sizes.
 """
 
 from __future__ import annotations
@@ -112,9 +113,10 @@ def warnings_in(text: str) -> list[str]:
 def test_the_stand_in_style_sets_what_the_tests_read_and_differs_from_what_is_in_force():
     params = matplotlib.rc_params_from_file(STAND_IN, use_default_template=False)
     assert params["font.size"] == 17 and list(params["font.family"]) == ["monospace"]
-    assert params["axes.prop_cycle"].by_key()["color"] == CYCLE and params["axes.spines.top"] is False
+    assert params["axes.prop_cycle"].by_key()["color"] == CYCLE and params["axes.linewidth"] == 2.5
     outside = rc_seen()
     assert outside["font.size"] != 17 and outside["colours"] != CYCLE and outside["font.family"] != ["monospace"]
+    assert matplotlib.rcParams["axes.linewidth"] != 2.5
 
 
 def test_a_figstyle_key_is_in_force_while_each_figure_is_drawn_and_not_after(tmp_path, rc_in_draw):
@@ -146,12 +148,15 @@ def test_a_style_reaches_the_text_and_axes_that_draw_leaves_to_rcparams(tmp_path
     assert styled_ax.xaxis.label.get_fontsize() == 19 and styled_ax.yaxis.label.get_fontsize() == 19
     assert {t.get_fontsize() for t in styled_ax.get_xticklabels() if t.get_text()} == {15}
     assert styled_ax.xaxis.label.get_fontfamily() == ["monospace"]
-    assert not styled_ax.spines["top"].get_visible() and not styled_ax.spines["right"].get_visible()
-    # ... and not on the plain one
-    assert plain_ax.xaxis.label.get_fontsize() != 19
-    assert {t.get_fontsize() for t in plain_ax.get_xticklabels() if t.get_text()} != {15}
+    assert styled_ax.spines["left"].get_linewidth() == 2.5
+    # ... and the 7 pt of the figure contract on the plain one, where no style set a size
+    assert plain_ax.xaxis.label.get_fontsize() == 7.0
+    assert {t.get_fontsize() for t in plain_ax.get_xticklabels() if t.get_text()} == {7.0}
     assert plain_ax.xaxis.label.get_fontfamily() != ["monospace"]
-    assert plain_ax.spines["top"].get_visible() and plain_ax.spines["right"].get_visible()
+    assert plain_ax.spines["left"].get_linewidth() != 2.5
+    # the top and right spines are off on both: `figure` hides them, so a style cannot restore them (2026-11-13)
+    for ax in (plain_ax, styled_ax):
+        assert ax.spines["left"].get_visible() and not ax.spines["top"].get_visible() and not ax.spines["right"].get_visible()
 
 
 # --- nothing set: the code that ran before styles ------------------------------------------------------------------------------------------------------

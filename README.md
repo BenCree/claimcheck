@@ -197,14 +197,22 @@ file beside it. The shared `check_claims` rule runs it after `relate`.
 python -m claimcheck.figures <project-dir> <out-dir>     # writes <out-dir>/<claim id>.png, <claim id>.commentary.md and index.json
 ```
 
-The canvas carries the data and nothing else (since 2026-11-12): axes, axis labels with
-units, a legend only where points are coloured by resampling unit, and a caption of at
-most two lines beneath naming the claim, the files, the number of points, what one point
-is and the y = x line where one is drawn. There is no suptitle, no title, no text block
-and no grid. The claim's id and statement, the estimate with its interval and the number
-of independent units, the claimed value and the verdict, p and R squared, and the rows
-and dataset the points came from are in `<claim id>.commentary.md`. It needs
-`matplotlib`. Without it the step prints a warning and exits 0, and the verdicts stand.
+The canvas carries the data and no words beyond its axis labels, tick labels and key
+(since 2026-11-13): the points, two axis lines with their major ticks, an axis label with
+its unit on each, and a key only where points are coloured by resampling unit. There is
+no suptitle, no title, no caption on the canvas, no annotation, no grid, no box frame and
+no minor ticks. The figure is 183 mm by 120 mm at 300 dpi, its text is 7 pt where a
+figstyle sets no size, and every line on it is between 0.25 and 1 pt unless a
+figstyle sets a wider axis line; the sentences of
+Nature's research figure guide behind each of those numbers are quoted in the module
+docstring of `claimcheck/figures.py`.
+
+`<claim id>.commentary.md` holds the claim's id and statement, the estimate with its
+interval and the number of independent units, the claimed value and the verdict, p and R
+squared, the project and the rows, dataset and files the points came from, and the
+caption: what one point is, how many there are, what each colour and each line mean, and
+that no error bars are drawn. It needs `matplotlib`. Without it the step prints a warning
+and exits 0, and the verdicts stand.
 
 **A shared matplotlib style.** So that the figures of different projects look alike, name
 an `.mplstyle` file in `context.toml`:
@@ -232,7 +240,7 @@ rcParams and sets others itself, so a style file changes only the first group.
 
 | reached by a style | set by `draw` itself, so a style cannot change it |
 |---|---|
-| `font.family` (and so the font); `axes.labelsize`, `xtick.labelsize`, `ytick.labelsize`; spines, ticks and the line widths of the axes; face and edge colours; label and tick colours | the colour of the points (one dark grey) and of the units (`tab20`), so `axes.prop_cycle` is not read; the caption at 7 pt and the legend at 6 and 7 pt, so `figure.titlesize`, `axes.titlesize`, `legend.fontsize` and `legend.title_fontsize` have no effect and `font.size` reaches only the tick and axis labels; the figure size (8.6 in wide), so `figure.figsize`; the resolution (130 dpi), so `savefig.dpi`; the grid, drawn with `ax.grid(alpha=0.25)`; the size of the points and the width of the y = x line |
+| `font.family` (and so the font); every text size, through `font.size`, `axes.labelsize`, `xtick.labelsize`, `ytick.labelsize`, `legend.fontsize` and `legend.title_fontsize`, with 7 pt applied only where the style sets no size; the ticks and the line width of the axes; face and edge colours; label and tick colours | the colour of the points (one dark grey) and of the units (`tab20`), so `axes.prop_cycle` is not read; the figure size (183 mm by 120 mm), so `figure.figsize`; the resolution (300 dpi), so `savefig.dpi`; the absence of a grid, of the top and right spines, of minor ticks and of a frame around the key, so `axes.grid`, `axes.spines.top`, `axes.spines.right`, `xtick.minor.visible`, `ytick.minor.visible` and `legend.frameon` have no effect; the size of the points and the 0.6 pt width of the y = x line |
 
 `matplotlib.style` also drops the keys that are not about style (`backend` and the others
 in `STYLE_BLACKLIST`) with a warning, so a style cannot change the Agg backend.

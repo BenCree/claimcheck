@@ -1,5 +1,9 @@
 """Figures by default: the shared `check_claims` rule runs relate and then claimcheck.figures, so every project gets figures/claims/<id>.png and
-index.json without writing a rule. The figure step must never fail the verdicts, and must not be a declared output of the shared rule."""
+index.json without writing a rule. The figure step must never fail the verdicts, and must not be a declared output of the shared rule.
+
+The figure contract of 2026-11-13 is held here for the figures a project really gets, drawn through `figures.build`: no words on the canvas beyond the axis
+labels, the tick labels and the key, and the caption in `<id>.commentary.md` beside each PNG. The failing twin, which plants a suptitle, a title, a caption
+and an annotation and shows that the auditor reports each, is in `tests/test_figures.py`."""
 
 from __future__ import annotations
 
@@ -31,6 +35,35 @@ def test_relate_then_figures_lists_every_claim(tmp_path):
     assert ids and [r["id"] for r in index] == ids
     for i in ids:
         assert (proj / "figures" / "claims" / f"{i}.png").stat().st_size > 5000
+
+
+def test_every_figure_build_draws_carries_no_words_but_its_axes_and_its_key(tmp_path, monkeypatch):
+    """What a project gets from the shared rule: three claims, one coloured by resampling unit, one in a single colour and one
+    that could not be measured. None of the three may carry a word beyond its axis labels, tick labels and key, and the caption
+    of each is in its commentary file."""
+    pytest.importorskip("matplotlib")
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from _figproject import text_artists, write_project
+
+    real_close, kept = plt.close, []
+    monkeypatch.setattr(plt, "close", lambda fig=None: kept.append(fig))
+    proj = tmp_path / "proj"
+    write_project(proj)
+    index = figures.build(proj, proj / "figures" / "claims")
+    assert len(kept) == len(index) == 3
+    for fig, row in zip(kept, index, strict=True):
+        fig.canvas.draw()
+        seen = text_artists(fig)
+        assert seen["extra"] == [], f"{row['id']}: {seen['extra']}"
+        assert seen["allowed"], f"{row['id']}: the auditor sees no text at all, so the empty list above proves nothing"
+        note = (proj / row["commentary"]).read_text()
+        assert "The canvas: x axis " in note and f"# {row['id']}" in note
+        assert ("No error bars are drawn" in note) is (row["n_points"] > 0)
+        real_close(fig)
 
 
 def test_without_matplotlib_figures_warns_and_exits_zero(tmp_path, monkeypatch, capsys):
@@ -85,3 +118,10 @@ def test_the_screening_methods_each_get_a_figure(tmp_path):
     for cid in ("bedroc20", "top20"):
         assert figures.result_line(verdicts[cid]).strip()
         print(figures.result_line(verdicts[cid])[:400])
+    # the caption names no kind of interval: topn_recovery's is Clopper-Pearson, not a bootstrap, and bedroc_no_alpha has none
+    top20 = (tmp_path / "figures" / "claims" / "top20.commentary.md").read_text()
+    none = (tmp_path / "figures" / "claims" / "bedroc_no_alpha.commentary.md").read_text()
+    assert "No error bars are drawn: the interval in the result line above belongs to the claim" in top20
+    assert "No error bars are drawn, and the result line above has no interval." in none
+    for text in (top20, none):
+        assert "bootstrap" not in text and "?" not in text

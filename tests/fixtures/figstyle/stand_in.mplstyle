@@ -6,6 +6,7 @@ font.size: 17
 axes.labelsize: 19
 xtick.labelsize: 15
 ytick.labelsize: 15
-axes.spines.top: False
-axes.spines.right: False
+axes.linewidth: 2.5
 axes.prop_cycle: cycler('color', ['ff00ff', '00ffff', 'ffff00'])
+# The spine keys are deliberately absent: since 2026-11-13 `figures.figure` hides the top and right spines itself, so a style
+# cannot restore them and they would prove nothing about what a style reaches. `axes.linewidth` is what proves it for the axes.

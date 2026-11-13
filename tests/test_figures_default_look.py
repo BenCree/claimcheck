@@ -1,9 +1,13 @@
-"""The default look of a claim figure is a fixed point: with no figstyle, `claimcheck.figures` draws what it drew before styles existed.
+"""The default look of a claim figure is a fixed point: with no figstyle, `claimcheck.figures` draws the figure its contract describes, byte for byte.
 
 The strongest statement available is a stored figure. `fixtures/figstyle/golden/MANIFEST.json` holds the sha256 of every figure below, of the PNG bytes
-and of the decoded pixels, drawn by `claimcheck/figures.py` as it stood BEFORE the figstyle hook (the manifest records that file's sha256). These tests
-draw the same inputs again and compare. One case per branch of `draw` (points coloured by unit with a legend and y = x; many points in one colour;
-few points in one colour; no points), and a three-claim project through `build`, whose `index.json` is compared too.
+and of the decoded pixels, drawn by the `claimcheck/figures.py` whose sha256 the manifest records. These tests draw the same inputs again and compare.
+One case per branch of `draw` (points coloured by unit with a key and y = x; many points in one colour; few points in one colour; a value claim, whose
+x = y gets no reference line; no points), and a three-claim project through `build`, whose `index.json` is compared too.
+
+The look pinned here is the one the project owner asked for on 2026-11-13: no words on the canvas beyond the axis labels, the tick labels and the key, no
+grid, no box frame, no minor ticks, 183 mm wide, 7 pt text, at 300 dpi. The figures pinned before that date carried a caption of up to two lines beneath
+the axes and a four-sided frame, so every digest below changed when the caption moved into `<id>.commentary.md`.
 
 PNG bytes depend on matplotlib, FreeType, Pillow and zlib, so the comparison runs only where all four match the manifest and is skipped, with the reason,
 anywhere else. The tests that hold in every environment are in `test_figstyle.py`: an empty style, a missing style and no style give the same bytes in
@@ -27,7 +31,7 @@ import pytest
 
 pytest.importorskip("matplotlib")
 
-from _figproject import BASE, pairs, write_project  # noqa: E402
+from _figproject import BASE, VALUE, pairs, write_project  # noqa: E402
 from claimcheck import figures  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -46,6 +50,7 @@ def cases() -> dict[str, tuple[dict, list[tuple[float, float]], list[str] | None
                    "why": "claimed 0.5 lies outside the 95% CI"}, pairs(240), None),
         "sparse": ({**BASE, "id": "G_sparse", "verdict": "unverifiable", "n_rows": 40, "ci_lo": -0.3, "ci_hi": 0.9,
                     "why": "the interval is wider than max_ci_width"}, pairs(40), None),
+        "value": ({**VALUE, "id": "G_value"}, pairs(60), [f"t{i % 5}" for i in range(60)]),
         "nopoints": ({**BASE, "id": "G_nopoints", "verdict": "unverifiable", "estimate": None, "n_rows": None, "ci_lo": None, "ci_hi": None,
                       "why": "the data has no column b"}, [], None),
     }
