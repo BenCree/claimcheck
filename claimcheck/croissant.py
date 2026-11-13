@@ -102,6 +102,36 @@ def _data_type(root: Path, files: list, column: str) -> str:
         return "sc:Text"
 
 
+def _json_safe(obj):
+    """The document with every non-finite float replaced by None, so it is JSON and not Python's superset of it.
+
+    WHY (2026-11-12). `claimed_range = [1.0, inf]` is a legal claim, and `json.dumps` writes its open side as the bare token
+    `Infinity`. RFC 8259 has no such token. Python's own `json` and `jq` read it back, so nothing here noticed; `orjson` refuses it,
+    and `orjson` is what `mlcroissant` reads with. The package validated in some readers and raised JSONDecodeError in the one whose
+    job is to get the data out (found by projects/z-ml/experiments/hq_decoy_testset reading its own output back).
+
+    AN OPEN SIDE IS WRITTEN AS null, in place: `"claimedRange": [1.0, null]` is "at least 1.0". The alternatives were weighed. A
+    large sentinel (1.8e308) is a number the claim never stated, and a consumer comparing against it gets an answer that looks
+    measured. Omitting the open side turns a two-element range into a one-element list whose remaining element no longer says
+    which side it is. null keeps the position, cannot be mistaken for a bound, and is what a reader of any JSON library receives
+    as "no value". A NaN, which no field should carry, becomes null by the same rule and not a token that breaks the file.
+
+    THE POSITION SURVIVES A JSON READER AND NOT A JSON-LD ONE, so each claim also carries `claimedLow` and `claimedHigh`. Read as
+    JSON-LD, an array is an unordered set and a null inside it is dropped: `[1.0, null]` and `[null, 1.0]` both arrive as the single
+    value 1.0 (measured with rdflib's JSON-LD parser). The two named keys say which side a bound is on; an open side is null there
+    too, which JSON-LD reads as the property being absent, and absent means unbounded. They are the names `graph.ttl` already uses.
+
+    `render` and `main` then serialise with `allow_nan=False`, so a non-finite value that reaches them by any other route raises
+    here and does not publish."""
+    if isinstance(obj, float):
+        return obj if obj == obj and obj not in (float("inf"), float("-inf")) else None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
 def build(root: Path | str, claims_path: Path | None = None,
           out_dir: Path | str | None = None) -> dict:
     """`out_dir` is where the JSON-LD will be WRITTEN, and it matters.
@@ -185,7 +215,7 @@ def build(root: Path | str, claims_path: Path | None = None,
                 rs["description"] = str(d["title"]).strip()
             record_sets.append(rs)
 
-    return {
+    return _json_safe({
         "@context": {**_CROISSANT_CONTEXT, "@language": "en", "cc": NS},
         "@type": "sc:Dataset",
         "conformsTo": "http://mlcommons.org/croissant/1.1",
@@ -206,6 +236,8 @@ def build(root: Path | str, claims_path: Path | None = None,
              "yUnit": r.get("y_unit"), "crossDataset": r.get("cross_dataset"),
              "method": r["method"], "claimed": r.get("claimed"),
              "claimedRange": r.get("claimed_range"),
+             "claimedLow": (r.get("claimed_range") or [None, None])[0],
+             "claimedHigh": (r.get("claimed_range") or [None, None])[1],
              "estimate": r.get("estimate"), "ciLow": r.get("ci_lo"),
              "ciHigh": r.get("ci_hi"), "nUnits": r.get("n_units"),
              "verdict": r["verdict"], "status": r["status"], "why": r["why"],
@@ -215,12 +247,12 @@ def build(root: Path | str, claims_path: Path | None = None,
              "level": r.get("level")}
             for r in claims["relationships"]
         ],
-    }
+    })
 
 
 def render(root: Path | str) -> str:
     """The emitter interface, shared with `graph` and `dcat`."""
-    return json.dumps(build(root), indent=2) + "\n"
+    return json.dumps(build(root), indent=2, allow_nan=False) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -229,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(a[1]) if len(a) > 1 else root / "results/croissant.json"
     d = build(root, out_dir=out.parent)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(d, indent=2) + "\n")
+    out.write_text(json.dumps(d, indent=2, allow_nan=False) + "\n")
     claims = d[f"{NS}claims"]
     refuted = sum(1 for c in claims if c["verdict"] == "refuted")
     unver = sum(1 for c in claims if c["verdict"] == "unverifiable")

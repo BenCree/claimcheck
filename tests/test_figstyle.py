@@ -189,8 +189,8 @@ def test_an_empty_style_changes_nothing_and_a_real_one_changes_every_figure(tmp_
     real_hashes = hashes(real, real_index)
     assert all(real_hashes[i] != plain_hashes[i] for i in plain_hashes)
     # index.json: the four keys it always had; a style adds the two that name it
-    assert all(set(r) == {"id", "verdict", "n_points", "figure"} for r in plain_index)
-    assert all(set(r) == {"id", "verdict", "n_points", "figure", "figstyle", "figstyle_sha256"} for r in empty_index + real_index)
+    assert all(set(r) == {"id", "verdict", "n_points", "figure", "commentary"} for r in plain_index)
+    assert all(set(r) == {"id", "verdict", "n_points", "figure", "commentary", "figstyle", "figstyle_sha256"} for r in empty_index + real_index)
 
 
 def test_importing_figures_or_asking_for_no_style_does_not_import_matplotlib(tmp_path):

@@ -1,6 +1,6 @@
 {
  "about": "sha256 of claim figures drawn with no style. Written by CLAIMCHECK_UPDATE_GOLDEN=1 pytest tests/test_figures_default_look.py",
- "figures_py_sha256": "9f429cb8202072ec5b09e49fc2cd4c852750037155043cbdb4fa0730f98cfab6",
+ "figures_py_sha256": "6668d07864b37946666126c8ef315f0b881158edbf832667efe29c8b56b4ce1a",
  "environment": {
   "matplotlib": "3.11.1",
   "freetype": "2.14.3",
@@ -9,37 +9,37 @@
  },
  "draw": {
   "units": {
-   "png_sha256": "e117211950e94e01fee8e481e35c987d170bf8f76af76759993f3d9be36e7ccd",
-   "pixels_sha256": "2c4aebb8973848980b0d0e11e76dfb312f4b45ffaf910a2080d27cfc9f53d428"
+   "png_sha256": "a3b87adf5553f9f8e17e419f7b9b1b0b935e6fb0c5d61297384fab930e05eeac",
+   "pixels_sha256": "9241c3b2abc6bfc85e65ca840000686287fe4c8fa0d936e73e7c4a763df6686f"
   },
   "dense": {
-   "png_sha256": "a79610458c6b140c1c94d9efd7f2205c3aec9d78693f1e8f849b5351f5920ae7",
-   "pixels_sha256": "2fc512c2f9fe83fa76a629e9bbaa35b53cef615ad75aced09767e821a09882e3"
+   "png_sha256": "4197eef38f7b3271452852be38dfb631513c9e826ef3f54c2c93acd5c1ef0e5e",
+   "pixels_sha256": "034533c591eb11462ff6d9680bb5e6f38f13694243363d122f2cc8ec6731c90e"
   },
   "sparse": {
-   "png_sha256": "bda72b390fbdc18ef0032d021fa0f8122dc51789cd695c04f184f1be3c03c5d7",
-   "pixels_sha256": "f42b7089cb1025b9818a77c67d14f9a0a79c6362416dca14b897bd0bef2ad75b"
+   "png_sha256": "81d9691d9f08101fb9f2df246d5678bb4b65a5b948f932f8e0da7c693639877f",
+   "pixels_sha256": "ea37b739a62a9c93e220c4e601052d7368e1810d7219cf17771aeee6b6e81f50"
   },
   "nopoints": {
-   "png_sha256": "61252aab7c2ddbbb294c6b085c6fc340f9b1677411167f6c06d2663552eb6a0a",
-   "pixels_sha256": "054c77f93be46f7237297bc9b742c5b81e658fbd3481cb037ecd3ed96920cbe4"
+   "png_sha256": "bb06a09ee609ec2595177e8b9ef39e5800757b09b81fa13cc50bd3cc1b092916",
+   "pixels_sha256": "3cd169791a0447a0ce73ad9844be841c0b269dd9aa28a39e1bb70b35563a9482"
   }
  },
  "build": {
   "P1_by_unit": {
-   "png_sha256": "7714595f86ea8553f71eb2e9e5bc408a99da4b3189e59ea1482a2cf64183ef06",
-   "pixels_sha256": "9f28cf857f454e8bbf4c95689c8e118d08c7dc50714f51bb9996035fe6a40ec6"
+   "png_sha256": "d0c760152abc4bb4c2f22835336cc0597eefc49a21904f13c4fe9667d282e6b7",
+   "pixels_sha256": "676594dfe26d7d16ebc4ac2dea69b154e6e0564cfd5f03beac6b294c0f210743"
   },
   "P2_by_row": {
-   "png_sha256": "0f25a4d4126464ddd8ba3f3fc972f9922a1ad95bb0a1a23bb75ddc768df8207b",
-   "pixels_sha256": "cb0737790d1bc6a62a0e2950bfaf95f6d49d7e47260fc1d7633bc0b5d628b211"
+   "png_sha256": "82f3a031ee70ebc8d74db19b087e951794dee55e97a3a0317068bbdb4e49e193",
+   "pixels_sha256": "732b5bebe2da32e380ecc0d23bdf6a5fbb56254ea123b33af66f936982b49765"
   },
   "P3_missing_column": {
-   "png_sha256": "15c28802bc4d4639134f3a67d1efd1e0df1f6349118928676426b6d322302a32",
-   "pixels_sha256": "0886e6102919444a0211a692ad4fd7ac974434a57e1da7f2ef319549b2f3b448"
+   "png_sha256": "f3600f58f2fba60891ea10c48361118513db45d5ca3c9b30737d0437064d92e4",
+   "pixels_sha256": "9d35300db14644c95527f299f894edf93c5f7af056a2b1d2b107c277fd0f091b"
   },
   "index.json": {
-   "sha256": "39bf81c8d1bfbf3de8d1768811d823b3846c02c5ff67411523d511bb130bb1d7"
+   "sha256": "2c9a28913412fffbb5f3d320ba78d3175dc2eeff5c52a3b46ed48dff87e25597"
   }
  }
 }

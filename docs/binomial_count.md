@@ -51,3 +51,10 @@ are the result; the range decides only the verdict word. Choose the range knowin
 
 `fraction` and `sign_test` keep the bootstrap interval. The independence assumption is the claim author's: units nested in a
 higher-level group (ligands of one protein) are treated as independent trials.
+
+## Not for a count of actives in a shortlist
+
+"k of the 7 actives are in the first 50 of 357" is not a `binomial_count` claim. The p here is against 0.5, and the chance share
+of a shortlist is its depth over the library (0.1401), with a hypergeometric count because the actives compete for the same
+places: 0 of 7 reads p = 0.016 here and is the likeliest count under chance. Use `topn_recovery` (`docs/topn_recovery.md`, added
+2026-11-12), which counts the table of the whole library and reports the exact hypergeometric p.

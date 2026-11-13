@@ -30,6 +30,7 @@ confidence interval becomes decoration.
 from __future__ import annotations
 
 import bisect
+import functools
 import hashlib
 import json
 import math
@@ -85,6 +86,23 @@ MAX_INFORMATIVE_WIDTH = 1.0
 #: about 1.4e-6; anything looser is still refuted. It is a tolerance, stated as
 #: one, and applies to no other claimed value.
 KNOWN_ANSWER_TOL = 1e-12
+
+#: A PERMUTED STATISTIC EXACTLY AS FAR FROM THE NULL CENTRE AS THE OBSERVED ONE COUNTS AS EXTREME, and floating point does not always
+#: say so (2026-11-12). |8/9 - 0.5| is 0.38888888888888884 and |1/9 - 0.5| is 0.3888888888888889, so with 3 actives against 3 decoys an
+#: observed AUC of 1/9 did not count its mirror 8/9 and came back p = 3/20 where the exact two-sided value is 4/20: a p too small.
+#: Pearson loses the same kind of tie on discrete data, where two permutations reach one |r| by different sums (82 of 16,129 comparisons
+#: on a 7-row integer design; Spearman and Kendall were exact on the designs tried). The comparison therefore allows this much, absolute.
+#: It is far above the rounding error of a statistic in [-1, 1] (about 1e-16) and far below the gap between two attainable values:
+#: 1 / (2 * n_pos * n_neg) for AUC, 2 / (n * (n - 1)) for Kendall and about 6 / n**3 for Spearman, which reach 1e-12 only beyond
+#: n_pos * n_neg = 5e11, n = 1.4e6 and n = 1.8e4. Past those sizes it counts values within 1e-12 of the observed one, a null mass that
+#: is itself negligible. It can only raise a p, never lower one.
+PERMUTATION_TIE_TOL = 1e-12
+
+
+def as_extreme(r: float, obs: float, centre: float = 0.0) -> bool:
+    """Whether a permuted statistic `r` is at least as far from the null `centre` as the observed `obs`, ties included
+    (see PERMUTATION_TIE_TOL)."""
+    return abs(r - centre) >= abs(obs - centre) - PERMUTATION_TIE_TOL
 
 
 def pearson(xs: list[float], ys: list[float]) -> float | None:
@@ -178,6 +196,105 @@ def roc_auc(xs: list[float], ys: list[float]) -> float | None:
     n_pos, n_neg = len(pos), len(neg)
     u = sum(rank[i] for i in pos) - n_pos * (n_pos + 1) / 2
     return u / (n_pos * n_neg)
+
+
+@functools.lru_cache(maxsize=64)
+def _bedroc_weights(n_total: int, alpha: float) -> tuple[float, ...]:
+    """exp(-alpha * k / N) for list position k = 1..N, position 1 being the best-scored compound."""
+    return tuple(math.exp(-alpha * k / n_total) for k in range(1, n_total + 1))
+
+
+def _bedroc_bounds(n_pos: int, n_total: int, alpha: float) -> tuple[float, float, float] | None:
+    """(weight sum of the worst ranking, of the best ranking, expected under a random ranking) for n_pos positives among n_total."""
+    w = _bedroc_weights(n_total, alpha)
+    s_min, s_max = math.fsum(w[n_total - n_pos:]), math.fsum(w[:n_pos])
+    if not s_max > s_min:                      # alpha so large that every weight underflows: nothing left to rank with
+        return None
+    return s_min, s_max, n_pos * math.fsum(w) / n_total
+
+
+def bedroc_random_expectation(n_pos: int, n_total: int, alpha: float) -> float | None:
+    """The BEDROC a uniformly random ranking scores on average, for n_pos positives among n_total compounds: the value at RIE = 1.
+    IT IS NOT ZERO. It is 0.0604 at 7 of 357 and alpha = 20, 0.0552 at 10 of 1,000, and close to the active fraction once
+    alpha * n_pos / n_total is large (0.4986 at 178 of 357). A BEDROC is read against this number, never against 0."""
+    if not (0 < n_pos < n_total) or not (math.isfinite(alpha) and alpha > 0):
+        return None
+    b = _bedroc_bounds(n_pos, n_total, alpha)
+    if b is None:
+        return None
+    s_min, s_max, s_random = b
+    return (s_random - s_min) / (s_max - s_min)
+
+
+def bedroc(xs: list[float], ys: list[float], alpha: float) -> float | None:
+    """BEDROC (Truchon and Bayly, J. Chem. Inf. Model. 2007, 47, 488) of a score `y` against a binary label `x`: early recognition,
+    each positive weighted by exp(-alpha * k / N) at list position k of N, position 1 being the highest score.
+
+    ADDED 2026-11-12 beside `roc_auc`, which weights every positive alike wherever it sits: two screeners that roc_auc scores 0.7525
+    and 0.7505 (10 positives among 1,000, at positions 1 to 5 and 496 to 500 against 248 to 257) score 0.5250 and 0.0072 here at
+    alpha = 20, and place 5 and 0 positives in the first 50.
+
+    THE DEFINITION IS A MIN-MAX NORMALISATION, AND IT DOES NOT SATURATE. With S the sum of the positives' weights, the value is
+    (S - S_min) / (S_max - S_min), S_max being the sum for the best ranking (every positive first) and S_min for the worst (every
+    positive last). It is exactly 1.0 for the best ranking and 0.0 for the worst AT ANY ACTIVE FRACTION. This is algebraically the
+    paper's closed form in RIE, sinh and cosh, and agrees with RDKit's CalcBEDROC to 1e-9. What moves with the active fraction is the
+    ceiling of RIE (not of BEDROC) and the value a random ranking scores (`bedroc_random_expectation`), which is well above 0.
+
+    `alpha` HAS NO DEFAULT. It decides what "early" means: the share of the weight carried by the first fraction z of the list is
+    (1 - exp(-alpha * z)) / (1 - exp(-alpha)), which at alpha = 20 is 0.798 for the first 8%. A BEDROC without its alpha is not a
+    number about anything, so the claim declares it and the verdict row records it.
+
+    `x` IS THE LABEL AND `y` IS THE SCORE, read as `roc_auc` reads them: the label is an indicator at >= 0.5 and HIGHER `y` MEANS MORE
+    LIKELY POSITIVE.
+
+    TIES SHARE. Compounds with equal scores share the mean of the weights of the positions they occupy between them, which is the
+    expectation over a random order of the tie. A bootstrap draw repeats rows, so ties are the ordinary case there, not a corner.
+
+    None when either class is empty, when alpha is not a positive finite number, or when the lists are ragged or empty, so the claim
+    comes back `unverifiable` and never as a number."""
+    if not xs or len(xs) != len(ys):
+        return None
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(alpha) or alpha <= 0:
+        return None
+    n_total = len(xs)
+    n_pos = sum(1 for v in xs if v >= 0.5)
+    if n_pos == 0 or n_pos == n_total:
+        return None
+    alpha = float(alpha)
+    bounds = _bedroc_bounds(n_pos, n_total, alpha)
+    if bounds is None:
+        return None
+    s_min, s_max, _ = bounds
+    w = _bedroc_weights(n_total, alpha)
+    order = sorted(range(n_total), key=lambda i: -ys[i])
+    parts: list[float] = []
+    i = 0
+    while i < n_total:
+        j = i
+        while j + 1 < n_total and ys[order[j + 1]] == ys[order[i]]:
+            j += 1
+        if j == i:
+            if xs[order[i]] >= 0.5:
+                parts.append(w[i])
+        else:
+            in_block = sum(1 for k in range(i, j + 1) if xs[order[k]] >= 0.5)
+            if in_block:
+                parts.append(in_block * math.fsum(w[i:j + 1]) / (j - i + 1))
+        i = j + 1
+    return (math.fsum(parts) - s_min) / (s_max - s_min)
+
+
+def bedroc_alpha(alpha: float):
+    """`bedroc` at a declared alpha, as the two-argument estimator the bootstrap and the permutation null call."""
+    def estimate(xs: list[float], ys: list[float]) -> float | None:
+        return bedroc(xs, ys, alpha)
+    return estimate
+
+
+def _bedroc_needs_alpha(xs: list[float], ys: list[float]) -> float | None:
+    """The registered `bedroc` entry. BEDROC has no value until alpha is declared, so called bare this returns None; `check` replaces
+    it with `bedroc_alpha(alpha)` or refuses the claim."""
+    return None
 
 
 def kendall(xs: list[float], ys: list[float]) -> float | None:
@@ -638,6 +755,93 @@ def _count_units(rows: list[dict], y: str, unit: str | None) -> dict:
     return info
 
 
+# ---------------------------------------------------------------------------------------------------------------------------
+# TOP-N RECOVERY (2026-11-12): "k of the K actives are among the N compounds the score shortlists, out of M screened". The count is
+# read from the table of the whole library, never declared, and its chance distribution is HYPERGEOMETRIC, not binomial: the actives
+# compete for the same N places, so they are not independent trials. `binomial_count` on a table of actives alone reports a p against
+# 0.5, which answers no question a shortlist poses (0 of 7 in the first 50 of 357 reads p = 0.016 there and is the likeliest count
+# under chance), and a binomial against N / M overstates the upper tail by 3% at 3 of 7 and 46% at 7 of 7. docs/topn_recovery.md.
+# ---------------------------------------------------------------------------------------------------------------------------
+
+
+def hypergeom_tails(k: int, n_marked: int, n_drawn: int, n_total: int) -> tuple[float, float] | None:
+    """(P(X <= k), P(X >= k)) for X the number of marked items among `n_drawn` taken without replacement from `n_total` of which
+    `n_marked` are marked. Exact: integer binomial coefficients, one division. None when the arguments describe no such draw or k is
+    outside the support. hypergeom_tails(3, 7, 50, 357)[1] is 0.060181, the chance that 3 or more of 7 actives land in the first 50
+    of 357; it is scipy.stats.hypergeom.sf(k - 1, n_total, n_marked, n_drawn) and Fisher's exact test, alternative "greater"."""
+    if not (0 <= n_marked <= n_total and 0 <= n_drawn <= n_total and n_total >= 1):
+        return None
+    k_min, k_max = max(0, n_drawn - (n_total - n_marked)), min(n_marked, n_drawn)
+    if not k_min <= k <= k_max:
+        return None
+    ways = {i: math.comb(n_marked, i) * math.comb(n_total - n_marked, n_drawn - i) for i in range(k_min, k_max + 1)}
+    total = math.comb(n_total, n_drawn)
+    return (sum(v for i, v in ways.items() if i <= k) / total, sum(v for i, v in ways.items() if i >= k) / total)
+
+
+def _indicator(raw) -> int | None | str:
+    """One cell as an indicator: 1, 0, None for a missing or non-finite value, or the offending text for anything else (a number
+    other than 0 or 1 included). The same reading `_count_units` gives a binomial_count column."""
+    text = str(raw).strip() if raw is not None else ""
+    low = text.lower()
+    if low in _MISSING_WORDS:
+        return None
+    if low in _TRUE_WORDS:
+        return 1
+    if low in _FALSE_WORDS:
+        return 0
+    try:
+        f = float(text)
+    except ValueError:
+        return text
+    if not math.isfinite(f):
+        return None
+    return int(f) if f in (0.0, 1.0) else text
+
+
+def _topn_recovery_share(xs: list[float], ys: list[float]) -> float | None:
+    """The share of the positives (x >= 0.5) that are shortlisted (y >= 0.5): recall at the shortlist depth. None with no positive."""
+    hit = [y for x, y in zip(xs, ys, strict=True) if x >= 0.5]
+    return sum(1.0 for v in hit if v >= 0.5) / len(hit) if hit else None
+
+
+def _topn_units(rows: list[dict], x: str, y: str, unit: str | None) -> dict:
+    """The 2 x 2 table of a `topn_recovery` claim, counted from the library table: `x` the label (active or not) and `y` the shortlist
+    indicator, both 0/1, true/false or yes/no, ONE ROW PER COMPOUND. A row missing either value is dropped and counted. Any other
+    value refuses the claim, and so does a unit with more than one row: several poses of one compound are not several compounds, and
+    which pose decides membership of the shortlist is a choice for the rule that writes the table."""
+    info: dict = {"refused": None}
+    vals: list[tuple[int, int, str]] = []
+    dropped = 0
+    for i, r in enumerate(rows):
+        a, b = _indicator(r.get(x)), _indicator(r.get(y))
+        for col, v in ((x, a), (y, b)):
+            if isinstance(v, str):
+                info["refused"] = (f"column {col!r} is not an indicator: row {i + 1} holds {v!r}. topn_recovery reads 0/1, true/false or "
+                                   f"yes/no in both columns; the shortlist is cut by the rule that writes the table, never thresholded here")
+                return info
+        if a is None or b is None:
+            dropped += 1
+            continue
+        assert isinstance(a, int) and isinstance(b, int)
+        vals.append((a, b, str(r.get(unit, "")).strip() if unit else str(i)))
+    if unit and vals and not any(c for _, _, c in vals):
+        info["refused"] = _empty_unit_message(unit, len(vals))
+        return info
+    if unit:
+        per = Counter(c for _, _, c in vals)
+        many = sorted(c for c, m in per.items() if m > 1)
+        if many:
+            info["refused"] = (f"{len(many)} {unit}(s) carry more than one row ({', '.join(many[:5])}{', ...' if len(many) > 5 else ''}; up to "
+                               f"{max(per.values())} rows each). topn_recovery counts compounds: one row per {unit}, the whole library, "
+                               f"and how several rows of one {unit} become one is a choice for the rule that writes the table")
+            return info
+    info |= {"n_rows": len(vals), "dropped": dropped,
+             "n_library": len(vals), "n_actives": sum(a for a, _, _ in vals), "n_shortlist": sum(b for _, b, _ in vals),
+             "n_success": sum(1 for a, b, _ in vals if a and b)}
+    return info
+
+
 def f_sf(f: float, d1: float, d2: float) -> float:
     """P(F > f) for F with (d1, d2) degrees of freedom: the p value of an F statistic. f_sf(39.0, 2, 2) is 0.025."""
     if f <= 0.0:
@@ -976,6 +1180,11 @@ ESTIMATORS: dict[str, tuple] = {
     # meaning more likely positive. Same bootstrap over the resampling unit; its permutation p is
     # centred on 0.5, not 0, because that is its null. No R squared.
     "roc_auc": (roc_auc, "correlation"),
+    # BEDROC (2026-11-12): early recognition, each positive weighted by exp(-alpha * k / N) at list position k. Same `x` label and `y`
+    # score as roc_auc, same bootstrap over the resampling unit. `alpha` is a REQUIRED claim key with no default, recorded on the row;
+    # the entry here returns None until `check` binds it. Its permutation p is centred on the random-ranking expectation at the
+    # table's active fraction, which is not 0. No R squared. Bounded 0 to 1 at any active fraction: it does not saturate.
+    "bedroc": (_bedroc_needs_alpha, "correlation"),
     # VALUE CLAIMS (2026-10-01). Every prediction is adjudicated here, not in an
     # analysis script, including the ones that are not correlations: an sd, a
     # variance share, a mean error, a count that passes a rule. They take the
@@ -1004,6 +1213,11 @@ ESTIMATORS: dict[str, tuple] = {
     # Clopper-Pearson gives [0.631, 1]. One 0/1 row per resampling unit (several rows under one unit are refused, see
     # `_count_units`). Nothing is resampled. The row carries the exact two-sided binomial p against 0.5 (`sign_test_p`).
     "binomial_count": (_fraction, "value"),
+    # TOP-N RECOVERY (2026-11-12): "k of the K actives are in the N-compound shortlist, out of M screened", from the table of the
+    # whole library: `x` the label, `y` the shortlist indicator, one row per compound. The estimate is k / K with the Clopper-Pearson
+    # interval (conservative here, see docs/topn_recovery.md); the p is the EXACT HYPERGEOMETRIC one, because actives competing for
+    # N places are not independent trials and the chance share is N / M, not 0.5.
+    "topn_recovery": (_topn_recovery_share, "value"),
     # POOLED SD AND SE (2026-10-28): the within-group sd of replicates pooled over groups, `group = "<column>"` naming the unit within which the
     # replicates sit (it must be the resampling unit; the bootstrap resamples groups). Interval: the same bootstrap, with the exact chi-square
     # interval beside it. The row carries the diagnostics for pooling and the trigger rule `pool_justified`, which never changes the verdict.
@@ -1053,9 +1267,21 @@ def permutation_p(pairs: list[tuple[float, float]], clusters: list[str] | None,
     built the same way the interval is: by the resampling unit.
 
     HOW THE NULL IS BUILT, AND THE BUG THE FIRST VERSION HAD. Each cluster keeps
-    its own ROW POSITIONS and receives the y values of another cluster, drawn
-    with replacement when the two differ in size. x and y are then independent
-    across clusters while each cluster's own y distribution is intact.
+    its own ROW POSITIONS and receives the y values of another cluster, each
+    position filled by a draw WITH REPLACEMENT from the donor's values, whatever
+    the two sizes. x and y are then independent across clusters while each
+    cluster's own y distribution is intact. With one row per cluster this is an
+    exact permutation of y. With several rows per cluster it is not, even when
+    donor and recipient have the same size: a recipient can receive one donor
+    value twice. This docstring said "with replacement when the two differ in
+    size" until 2026-11-12; the code never did that. Measured before choosing
+    which to change (docs/screening_metrics_study.md): under a null with
+    unit-level effects in both columns the share of p <= 0.05 was 0.037 to 0.055
+    for the rule as coded and 0.043 to 0.055 for a within-block permutation at
+    equal sizes, over 600 datasets per design, standard error 0.009. Neither is
+    distinguishable from 0.05 or from the other, so the code stands and the
+    sentence was corrected: changing the code would have moved the random stream
+    of every clustered p for no measured gain.
 
     The first version concatenated the y blocks in cluster order and laid them
     against x in ROW order. On a file whose rows are contiguous by cluster those
@@ -1107,9 +1333,11 @@ def permutation_p(pairs: list[tuple[float, float]], clusters: list[str] | None,
         done += 1
         # CENTRED ON THE STATISTIC'S OWN NULL. A correlation has no association at 0, so the
         # default compares magnitudes about 0; AUC has none at 0.5, and comparing |AUC| about 0
-        # would call every result extreme. `centre` is 0.0 for every method but roc_auc, so the
-        # behaviour of the existing ones is unchanged.
-        if abs(r - centre) >= abs(obs - centre):
+        # would call every result extreme. `centre` is 0.0 for every method but roc_auc and bedroc, so the
+        # behaviour of the existing ones is unchanged. The comparison counts an exact tie in
+        # distance as extreme, with a tolerance, because floating point loses the mirror value
+        # (`as_extreme`, PERMUTATION_TIE_TOL).
+        if as_extreme(r, obs, centre):
             hits += 1
     if done < n_perm // 2:
         return None
@@ -1227,6 +1455,10 @@ def _value_verdict(rel: dict, row: dict, v: float, lo: float, hi: float, n_eff: 
     elif rel["method"] == "binomial_count":
         count = (f" ({row['n_success']} of {n_eff} {unit or 'row'}(s) pass, {row['dropped']} dropped as missing; exact two-sided binomial "
                  f"p = {row['p_value']:.3g} against 0.5)")
+    elif rel["method"] == "topn_recovery":
+        count = (f" ({row['n_success']} of {row['n_actives']} actives are among the {row['n_shortlist']} shortlisted of {row['n_library']} "
+                 f"{unit or 'row'}(s), {row['dropped']} dropped as missing; chance share {row['p_null']:.4g}; exact hypergeometric "
+                 f"P(at least {row['n_success']}) = {row['p_enrichment']:.3g}, two-sided p = {row['p_value']:.3g})")
     elif rel["method"] in ("pooled_sd", "pooled_se"):
         flag = ("the trigger rule says pooling is justified" if row["pool_justified"] else
                 f"the trigger rule says pooling is NOT justified (failed: {', '.join(row['pool_failed'])}); the verdict is unchanged")
@@ -1242,6 +1474,9 @@ def _value_verdict(rel: dict, row: dict, v: float, lo: float, hi: float, n_eff: 
     elif rel["method"] == "binomial_count":
         where = (f"the exact 95% Clopper-Pearson CI [{lo:.4g}, {hi:.4g}] for the share = {v:.4g}{count}, {n_eff} independent "
                  f"{unit or 'row'}(s), nothing resampled")
+    elif rel["method"] == "topn_recovery":
+        where = (f"the 95% Clopper-Pearson CI [{lo:.4g}, {hi:.4g}] for the share of actives recovered = {v:.4g}{count}, {n_eff} "
+                 f"actives treated as independent trials (conservative when they compete for places), nothing resampled")
     else:
         where = f"the 95% CI [{lo:.4g}, {hi:.4g}] for {rel['method']} = {v:.4g}{count}, resampling {n_eff} {unit or 'row'}(s)"
     if rel.get("claimed_range") is not None:
@@ -1368,6 +1603,21 @@ def check(root: Path | str) -> dict:
                 continue
             estimate = (kendall_tie_tol if rel["method"] == "kendall" else spearman_tie_tol)(float(tie_tol))
             row["tie_tol"] = float(tie_tol)
+
+        # `alpha` (bedroc only, REQUIRED there): the early-recognition weight. No default, because the number means nothing without it
+        # and a default would hide the choice. It is recorded on the row. On any other method the key is left alone, as before.
+        if rel["method"] == "bedroc":
+            alpha = rel.get("alpha")
+            if (isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(alpha) or alpha <= 0):
+                out.append(verdict(
+                    UNVERIFIABLE,
+                    ("bedroc needs `alpha = <positive number>` and none is declared" if alpha is None else
+                     f"alpha = {alpha!r} is not accepted: bedroc needs a positive finite number")
+                    + ". There is no default: alpha decides what share of the weight the top of the list carries "
+                      "(0.798 in the first 8% at alpha = 20), so the claim states it"))
+                continue
+            estimate = bedroc_alpha(float(alpha))
+            row["alpha"] = float(alpha)
 
         # POOLED METHODS name the unit within which replicates sit with `group`, and it is the unit the bootstrap resamples: a group is one
         # independent draw, its rows are not. A resampling unit that differs from it is refused, naming both, because resampling the rows of
@@ -1554,6 +1804,49 @@ def check(root: Path | str) -> dict:
                     "p_method": f"exact two-sided binomial against 0.5 over {n_u} {unit or 'row'}(s)"}
             out.append(_value_verdict(rel, row, est0, lo, hi, n_u, unit, verdict))
             continue
+        elif rel["method"] == "topn_recovery":
+            # EXACT, NOTHING RESAMPLED (2026-11-12). The 2 x 2 table is counted from the library table: K actives, N shortlisted, M
+            # compounds, k both. Estimate k / K, Clopper-Pearson interval on k of K, exact hypergeometric p. Every field goes on `row`
+            # before `_value_verdict`, which copies it.
+            if rel["x"] == rel["y"]:
+                out.append(verdict(UNVERIFIABLE, f"topn_recovery is a two-column method: x is the label and y the shortlist indicator "
+                                                 f"(x = y = {rel['x']!r})"))
+                continue
+            top = _topn_units(rows, x, y, unit)
+            row |= {k_: v_ for k_, v_ in top.items() if k_ != "refused"}
+            if top["refused"]:
+                out.append(verdict(UNVERIFIABLE, top["refused"]))
+                continue
+            k_s, n_act, n_short, n_lib = top["n_success"], top["n_actives"], top["n_shortlist"], top["n_library"]
+            if n_act == 0:
+                out.append(verdict(UNVERIFIABLE, f"no {unit or 'row'} is labelled active among {n_lib} usable ({top['dropped']} dropped as "
+                                                 f"missing), so there is nothing to recover"))
+                continue
+            if n_short == 0 or n_short == n_lib or n_act == n_lib:
+                out.append(verdict(UNVERIFIABLE, f"the table cannot show recovery: {n_short} of {n_lib} {unit or 'row'}(s) are shortlisted and "
+                                                 f"{n_act} are active. A shortlist that holds nothing or everything, or a library with no "
+                                                 f"inactive, fixes the count whatever the score does"))
+                continue
+            tails = hypergeom_tails(k_s, n_act, n_short, n_lib)
+            assert tails is not None                                   # k is counted from the same table, so it is in the support
+            p_lower, p_upper = tails
+            cp_interval = clopper_pearson(k_s, n_act)
+            assert cp_interval is not None                             # n_act >= 1 and 0 <= k <= n_act here
+            lo, hi = cp_interval
+            est0 = k_s / n_act
+            p_null = n_short / n_lib
+            row |= {"estimate": round(est0, 6), "ci_lo": round(lo, 6), "ci_hi": round(hi, 6), "ci_level": 0.95, "n_units": n_act,
+                    "ci_width": round(hi - lo, 6), "interval": "clopper_pearson",
+                    "interval_source": "exact binomial (Clopper and Pearson 1934) on k of the actives, treating them as independent trials. "
+                                       "They compete for the shortlist, which makes the count less variable than a binomial, so the "
+                                       "interval is conservative: measured coverage 0.959 to 1.000 of the expected share recovered, over 25 designs "
+                                       "(docs/screening_metrics_study.md)",
+                    "p_null": round(p_null, 6), "enrichment_factor": round(est0 / p_null, 6), "max_share": round(min(1.0, n_short / n_act), 6),
+                    "p_enrichment": p_upper, "p_depletion": p_lower, "p_value": min(1.0, 2 * min(p_lower, p_upper)),
+                    "p_method": f"exact hypergeometric: {n_act} actives and {n_short} shortlist places among {n_lib} {unit or 'row'}(s); "
+                                f"p_enrichment is P(X >= k), Fisher's exact test one-sided; p_value is twice the smaller tail, capped at 1"}
+            out.append(_value_verdict(rel, row, est0, lo, hi, n_act, unit, verdict))
+            continue
         elif rel["method"] == "sign_test":
             # ONE VALUE PER UNIT BEFORE THE BOOTSTRAP, because the estimator sees only the resampled values and the
             # collapse to a majority sign needs the unit labels. The exact p goes on the row here: `verdict` copies the
@@ -1619,13 +1912,27 @@ def check(root: Path | str) -> dict:
             # of variance or of anything else, so it is left out rather than printed to be misread.
             row["r_squared"] = None
             row["r_squared_note"] = "not reported: AUC is a probability of correct ordering, not a correlation"
+        elif rel["method"] == "bedroc":
+            # The comparison point travels with the estimate: a random ranking does not score 0.
+            n_pos = sum(1 for p in pairs if p[0] >= 0.5)
+            centre = bedroc_random_expectation(n_pos, len(pairs), row["alpha"])
+            row["r_squared"] = None
+            row["r_squared_note"] = "not reported: BEDROC is a weighted early-recognition score, not a correlation"
+            row |= {"n_actives": n_pos, "active_fraction": round(n_pos / len(pairs), 6),
+                    "alpha_times_active_fraction": round(row["alpha"] * n_pos / len(pairs), 6),
+                    "random_expectation": None if centre is None else round(centre, 6),
+                    "weight_share_top_8pct": round((1 - math.exp(-row["alpha"] * 0.08)) / (1 - math.exp(-row["alpha"])), 6)}
         else:
             row["r_squared"] = round(r * r, 6)
             row["r_squared_is_on"] = {"spearman": "ranks", "kendall": "tau-b"}.get(rel["method"], "values")
         if rel["method"] == "kendall":
             # tau-b squared is not the variance of anything, so say so on the row rather than leave "R squared" to be read as one.
             row["r_squared_note"] = "tau-b squared, a squared rank correlation; not a share of variance"
-        pp = permutation_p(pairs, clusters, estimate=estimate, centre=0.5 if rel["method"] == "roc_auc" else 0.0)
+        if rel["method"] == "bedroc":
+            null_centre = centre if centre is not None else 0.0        # the unrounded expectation, not the 6-place value on the row
+        else:
+            null_centre = 0.5 if rel["method"] == "roc_auc" else 0.0
+        pp = permutation_p(pairs, clusters, estimate=estimate, centre=null_centre)
         if pp is not None:
             p_val, p_floor = pp
             row |= {"p_value": round(p_val, 6), "p_floor": round(p_floor, 6),
@@ -1636,6 +1943,12 @@ def check(root: Path | str) -> dict:
                                 f"two-sided permutation of {n_eff} rows, "
                                 f"{N_BOOT} draws (NO resampling unit declared, "
                                 f"so this p assumes the rows are independent)"}
+            if rel["method"] == "bedroc":
+                # The null is skewed: its floor is only `random_expectation` below its centre, so a score worse than random cannot
+                # be far from the centre and this p detects enrichment only. An inverted score is a question for roc_auc.
+                row["p_method"] += (f"; distance from the random-ranking expectation {null_centre:.4f}. The floor of BEDROC is only "
+                                    f"that far below it, so where the expectation is small this p detects enrichment and has "
+                                    f"almost no power against a score worse than random")
         else:
             row["p_value"] = None
             row["p_method"] = "permutation undefined on these pairs"

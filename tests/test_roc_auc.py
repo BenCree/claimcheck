@@ -92,3 +92,48 @@ def test_existing_methods_keep_their_uncentred_null():
     b = permutation_p(pairs, clusters, n_perm=100, centre=0.0)
     assert a == b and a[0] <= a[1] + 1e-12
     assert all(math.isfinite(v) for v in a)
+
+
+# ── added 2026-11-12 from an independent review of the estimator ─────────────
+
+def _mean_share_of_decoys_outranked(labels, scores):
+    pos = [s for v, s in zip(labels, scores, strict=True) if v >= 0.5]
+    neg = [s for v, s in zip(labels, scores, strict=True) if v < 0.5]
+    return sum(sum((p > q) + 0.5 * (p == q) for q in neg) / len(neg) for p in pos) / len(pos)
+
+
+def test_it_is_the_mean_over_positives_of_the_share_of_negatives_outranked_on_heavily_tied_scores():
+    """The definition, counted pair by pair with a half for a tie, on scores rounded to about seven distinct values. Where scipy
+    is installed it is also Mann-Whitney U over n_pos * n_neg."""
+    rng = random.Random(21)
+    for _ in range(10):
+        labels = [1.0 if rng.random() < 0.08 else 0.0 for _ in range(300)]
+        scores = [float(round(rng.gauss(0.8 * v, 1.0))) for v in labels]
+        assert roc_auc(labels, scores) == pytest.approx(_mean_share_of_decoys_outranked(labels, scores), abs=1e-12)
+    stats = pytest.importorskip("scipy.stats")
+    pos = [s for v, s in zip(labels, scores, strict=True) if v >= 0.5]
+    neg = [s for v, s in zip(labels, scores, strict=True) if v < 0.5]
+    assert roc_auc(labels, scores) == pytest.approx(stats.mannwhitneyu(pos, neg).statistic / (len(pos) * len(neg)), abs=1e-12)
+
+
+def _at_positions(active_positions, n_total=1000):
+    labels = [0.0] * n_total
+    for k in active_positions:
+        labels[k - 1] = 1.0
+    return labels, [float(n_total - i) for i in range(n_total)]
+
+
+def test_every_positive_counts_alike_wherever_it_sits():
+    """AUC is linear in the positions of the positives: with 10 positives among 1,000, moving one from position 500 to 400 and
+    moving another from 101 to 1 each change it by 100 / 9900. This is why it cannot see early recognition, and why `bedroc` exists.
+    The identity is in NEGATIVES CROSSED: a positive that passes another positive on the way crosses 99 negatives, not 100."""
+    base = [101, 500, 600, 650, 700, 750, 800, 850, 900, 950]
+    a0 = roc_auc(*_at_positions(base))
+    middle = roc_auc(*_at_positions([101, 400] + base[2:])) - a0
+    top = roc_auc(*_at_positions([1, 500] + base[2:])) - a0
+    assert middle == pytest.approx(100 / 9900, abs=1e-12) and top == pytest.approx(100 / 9900, abs=1e-12)
+    labels, scores = _at_positions([101, 450, 500, 600, 650, 700, 750, 800, 850, 900])
+    order = list(range(1000))
+    order.insert(399, order.pop(499))                            # the compound at 500 moves to 400, passing the positive at 450
+    moved = roc_auc([labels[i] for i in order], scores) - roc_auc(labels, scores)
+    assert moved == pytest.approx(99 / 9900, abs=1e-12)

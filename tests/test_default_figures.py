@@ -50,3 +50,38 @@ def test_the_shared_rule_runs_figures_but_does_not_declare_the_directory():
     outputs = rule[rule.index("output:"):rule.index("shell:")]
     assert "figures" not in outputs.replace("# ", "#").split("#")[0]
     assert "||" in rule                                          # a failing figure step prints a warning and cannot fail the verdicts
+
+
+def test_the_screening_methods_each_get_a_figure(tmp_path):
+    """Added 2026-11-12 with `bedroc` and `topn_recovery`: a new method must not break the figure step, which runs inside the shared
+    check_claims rule. One claim of each, one roc_auc on the same table, and a bedroc claim with no alpha (unverifiable, no estimate)."""
+    pytest.importorskip("matplotlib")
+    import random
+
+    from claimcheck import figures
+    from claimcheck.relate import main as relate_main
+
+    rng = random.Random(3)
+    rows = [(f"c{i}", int(i < 9), rng.gauss(2.0 * (i < 9), 1.0)) for i in range(150)]
+    cut = sorted((s for _, _, s in rows), reverse=True)[19]
+    lines = ["compound,is_hit,score,in_top20"] + [f"{c},{h},{s:.6f},{int(s >= cut)}" for c, h, s in rows]
+    (tmp_path / "d.csv").write_text("\n".join(lines) + "\n")
+    variables = "".join(f'[[variables]]\ndataset = "d"\nname = "{n}"\nunit = "1"\n\n' for n in ("is_hit", "score", "in_top20"))
+    head = '[[relationships]]\nx = "d.is_hit"\nresampling_unit = "compound"\n'
+    (tmp_path / "context.toml").write_text(
+        '[project]\nname = "s"\n\n[[datasets]]\nid = "d"\norigin = "computed"\nfiles = ["d.csv"]\n\n' + variables
+        + head + 'id = "auc"\ny = "d.score"\nkind = "correlation"\nmethod = "roc_auc"\nclaimed_range = [0.5, 1.0]\n\n'
+        + head + 'id = "bedroc20"\ny = "d.score"\nkind = "correlation"\nmethod = "bedroc"\nalpha = 20\nclaimed_range = [0.0, 1.0]\n\n'
+        + head + 'id = "bedroc_no_alpha"\ny = "d.score"\nkind = "correlation"\nmethod = "bedroc"\nclaimed_range = [0.0, 1.0]\n\n'
+        + head + 'id = "top20"\ny = "d.in_top20"\nkind = "value"\nmethod = "topn_recovery"\nclaimed_range = [0.0, 1.0]\n')
+    assert relate_main([str(tmp_path), str(tmp_path / "results" / "claims.json")]) == 0
+    verdicts = {r["id"]: r for r in json.loads((tmp_path / "results" / "claims.json").read_text())["relationships"]}
+    assert verdicts["bedroc_no_alpha"]["verdict"] == "unverifiable" and verdicts["top20"]["n_shortlist"] == 20
+    assert verdicts["bedroc20"]["alpha"] == 20.0 and verdicts["top20"]["n_actives"] == 9
+    index = figures.build(tmp_path, tmp_path / "figures" / "claims")
+    assert [r["id"] for r in index] == ["auc", "bedroc20", "bedroc_no_alpha", "top20"]
+    for r in index:
+        assert (tmp_path / "figures" / "claims" / f"{r['id']}.png").stat().st_size > 5000
+    for cid in ("bedroc20", "top20"):
+        assert figures.result_line(verdicts[cid]).strip()
+        print(figures.result_line(verdicts[cid])[:400])

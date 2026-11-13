@@ -122,7 +122,7 @@ was given, and would have done that to a true claim just as readily.
 | module | for | needs |
 |---|---|---|
 | [`relate`](#relate) | recompute a claimed relationship | *nothing* |
-| [`figures`](#figures) | one figure per claim, the claim as its title; optionally in a shared matplotlib style | `matplotlib` |
+| [`figures`](#figures) | one figure per claim with its commentary beside it; optionally in a shared matplotlib style | `matplotlib` |
 | [`datasets`](#datasets) | load data; refuse a changed hand-copied file or a fan-out join | *nothing* |
 | [`units`](#units) | convert between declared units, or raise | *nothing* |
 | [`labels`](#labels) | a positive rate that carries the rule defining it | *nothing* |
@@ -190,17 +190,21 @@ output and never dispatched on it, so `method = "spearman"` computed Pearson.
 
 ### `figures`
 
-One PNG per claim, with the claim as its title, drawn from the pairs its verdict was
-computed on. The shared `check_claims` rule runs it after `relate`.
+One PNG per claim, drawn from the pairs its verdict was computed on, with a commentary
+file beside it. The shared `check_claims` rule runs it after `relate`.
 
 ```bash
-python -m claimcheck.figures <project-dir> <out-dir>     # writes <out-dir>/<claim id>.png and <out-dir>/index.json
+python -m claimcheck.figures <project-dir> <out-dir>     # writes <out-dir>/<claim id>.png, <claim id>.commentary.md and index.json
 ```
 
-The caption carries the claim's id and statement, the estimate with its interval and the
-number of independent units, the claimed value and the verdict, p and R squared, and the
-rows and dataset the points came from. It needs `matplotlib`. Without it the step prints
-a warning and exits 0, and the verdicts stand.
+The canvas carries the data and nothing else (since 2026-11-12): axes, axis labels with
+units, a legend only where points are coloured by resampling unit, and a caption of at
+most two lines beneath naming the claim, the files, the number of points, what one point
+is and the y = x line where one is drawn. There is no suptitle, no title, no text block
+and no grid. The claim's id and statement, the estimate with its interval and the number
+of independent units, the claimed value and the verdict, p and R squared, and the rows
+and dataset the points came from are in `<claim id>.commentary.md`. It needs
+`matplotlib`. Without it the step prints a warning and exits 0, and the verdicts stand.
 
 **A shared matplotlib style.** So that the figures of different projects look alike, name
 an `.mplstyle` file in `context.toml`:
@@ -228,7 +232,7 @@ rcParams and sets others itself, so a style file changes only the first group.
 
 | reached by a style | set by `draw` itself, so a style cannot change it |
 |---|---|
-| `font.family` (and so the font); `axes.labelsize`, `xtick.labelsize`, `ytick.labelsize`; spines, ticks and the line widths of the axes; face and edge colours; label and tick colours | the colours of the verdict (green, red, grey) and of the units (`tab20`), so `axes.prop_cycle` is not read; the caption at 8 pt, the verdict word at 10 pt and the legend at 6 and 7 pt, so `figure.titlesize`, `axes.titlesize`, `legend.fontsize` and `legend.title_fontsize` have no effect and `font.size` reaches only the tick and axis labels; the figure size (8.6 in wide), so `figure.figsize`; the resolution (130 dpi), so `savefig.dpi`; the grid, drawn with `ax.grid(alpha=0.25)`; the size of the points and the width of the y = x line |
+| `font.family` (and so the font); `axes.labelsize`, `xtick.labelsize`, `ytick.labelsize`; spines, ticks and the line widths of the axes; face and edge colours; label and tick colours | the colour of the points (one dark grey) and of the units (`tab20`), so `axes.prop_cycle` is not read; the caption at 7 pt and the legend at 6 and 7 pt, so `figure.titlesize`, `axes.titlesize`, `legend.fontsize` and `legend.title_fontsize` have no effect and `font.size` reaches only the tick and axis labels; the figure size (8.6 in wide), so `figure.figsize`; the resolution (130 dpi), so `savefig.dpi`; the grid, drawn with `ax.grid(alpha=0.25)`; the size of the points and the width of the y = x line |
 
 `matplotlib.style` also drops the keys that are not about style (`backend` and the others
 in `STYLE_BLACKLIST`) with a warning, so a style cannot change the Agg backend.

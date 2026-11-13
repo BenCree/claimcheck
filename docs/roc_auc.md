@@ -54,3 +54,19 @@ square is not a share of anything; the row says so in `r_squared_note`.
 An AUC is only as honest as the decoys. If the decoys differ from the hits in size or properties, the
 AUC measures that difference and not the score: match the decoys and show the match, as
 `hidden_hit_bench` does with a property-parity table and a classifier that must fail.
+
+## What it cannot see, and the two methods beside it
+
+AUC is the mean over positives of the share of negatives each one outranks, so every positive counts alike wherever it sits: with
+10 positives among 1,000, moving one from position 500 to 400 changes it by exactly as much as moving another from 101 to 1
+(100 / 9900 each, provided only negatives are crossed). A screener with 5 positives at the very top and 5 in the middle scores
+0.7525 and one with all 10 a quarter of the way down scores 0.7505. For early recognition use `bedroc` (`docs/bedroc.md`), and for a
+count of actives in a shortlist use `topn_recovery` (`docs/topn_recovery.md`).
+
+## The permutation p before 2026-11-12
+
+The comparison `abs(r - 0.5) >= abs(obs - 0.5)` was made in floating point, where |8/9 - 0.5| and |1/9 - 0.5| differ in the last
+digit, so a permuted AUC exactly as extreme as the observed one on the other side of 0.5 could be missed and the p came back too
+small: 3/20 where the exact value is 4/20 with 3 positives against 3 negatives, and by at most two permutation draws in 300 at 7
+positives among 357. The comparison now allows an absolute tolerance of 1e-12 (`PERMUTATION_TIE_TOL` in `relate.py`). A p from an
+earlier checker can only have been too small, never too large, and no verdict depends on p.

@@ -1,12 +1,16 @@
-"""One figure per claim, the claim itself as its title, drawn from the pairs its verdict was computed on.
+"""One figure per claim, drawn from the pairs its verdict was computed on, with its commentary beside it.
 
     python -m claimcheck.figures <project-dir> <out-dir>
 
-A verdict travels further than its paragraph, so each figure carries what is
-needed to read it without the paragraph: the claim's id and statement (the
-first sentences of `evidence.source`), the estimate with its interval and the
-number of independent units it resamples, the claimed value and the verdict,
-p and R squared, and the rows and dataset the points came from.
+THE CANVAS CARRIES THE DATA AND NOTHING ELSE (2026-11-12): axes, axis labels with units, a legend only where there is more than
+one series, and a caption of at most two lines beneath, naming the claim, the files, the number of points, what one point is and
+every other mark drawn. No suptitle, no title, no text block, no background grid. Until that date the claim's statement, its
+result line and its data were a suptitle of up to a dozen lines, the verdict was a coloured title and the points took the
+verdict's colour; the project owner's reading was that the figures looked like machine output and not like a paper's.
+
+What a verdict needs in order to travel is still written, beside the figure and not on it: `<claim id>.commentary.md` holds the
+claim's id and statement (the first sentences of `evidence.source`), the estimate with its interval and the number of independent
+units it resamples, the claimed value and the verdict, p and R squared, and the rows and dataset the points came from.
 
 The points are rebuilt exactly as `claimcheck.relate` builds them (one dataset,
 or two joined on the declared key; rows usable for both columns, non-finite
@@ -14,11 +18,15 @@ values dropped), so the figure shows the population the number describes and
 not a neighbouring one. Points are coloured by resampling unit when there are
 at most twenty units, because a correlation over clustered rows is read by
 looking at the clusters. A claim that could not be measured (no data, no column,
-no unit) gets a figure too, stating why: an absent figure reads as an oversight,
-a figure that says `unverifiable` and gives the reason reads as a result.
+no unit) gets a figure too, empty axes with a caption saying so and the reason in
+its commentary: an absent figure reads as an oversight.
 
-Writes `<out-dir>/<claim id>.png` and `<out-dir>/index.json` (claim id, verdict,
-figure path). Needs matplotlib; nothing else in the package does.
+Writes `<out-dir>/<claim id>.png`, `<out-dir>/<claim id>.commentary.md` and `<out-dir>/index.json` (claim id, verdict,
+figure path, commentary path). Needs matplotlib; nothing else in the package does.
+
+NOT DONE HERE, AND A DECISION FOR THE OWNER: the rule also asks for fonts of 5 to 7 pt at the size the figure is read at. The
+size of axis and tick labels is deliberately left to matplotlib's rcParams so that a shared style can set it (below), and the
+canvas is 8.6 inches wide. A lab `.mplstyle` with 7 pt fonts, and a narrower canvas, would complete the rule.
 
 A shared matplotlib style can be named so that figures from different projects look
 alike: `[project] figstyle = "<path to an .mplstyle>"` in context.toml (a relative path
@@ -27,8 +35,8 @@ CLAIMCHECK_FIGSTYLE (a relative path is read from the working directory). The ke
 over the variable. Each figure is drawn inside `matplotlib.style.context`, so the style
 reaches whatever `draw` leaves to matplotlib's rcParams: the font family, the sizes of
 tick and axis labels, spines, face and edge colours. It does not reach what `draw` sets
-itself: the verdict and unit colours, the sizes of the caption, verdict word and legend,
-the figure size, the resolution and the grid. A path that does not exist, or cannot be
+itself: the point and unit colours, the sizes of the caption and legend,
+the figure size, the resolution and the absence of a grid. A path that does not exist, or cannot be
 read as a style, prints one warning and the figures are drawn as they are without a
 style. With neither set no style is loaded or entered and the output is what it was
 before styles existed. When a style is applied, `index.json` names it (`figstyle`) with
@@ -54,7 +62,8 @@ from claimcheck.datasets import DatasetError, join
 from claimcheck.datasets import load as load_dataset
 from claimcheck.relate import _paired, _ref
 
-COLOUR = {"agrees": "#1a7f37", "refuted": "#c62828", "unverifiable": "#6e6e6e"}
+POINT_COLOUR = "#333333"                    # one colour for one series; the verdict is not drawn, so no colour encodes it
+CAPTION_PT = 7                              # the caption beneath the axes, in points
 MAX_UNIT_COLOURS = 20
 WRAP = 118
 STYLE_KEY = "figstyle"                      # in [project] of context.toml
@@ -115,13 +124,35 @@ def data_line(claim: dict, files: dict[str, list[str]]) -> str:
     return f"{head}, level {lvl}; data {where}" if lvl else f"{head}; data {where}"
 
 
-def caption(claim: dict, files: dict[str, list[str]]) -> str:
-    """The whole suptitle: id, statement, result, data. Wrapped to the figure's width."""
-    lines = [str(claim.get("id"))]
-    lines += textwrap.wrap(statement(claim), WRAP)[:4]
-    lines += textwrap.wrap(result_line(claim), WRAP)
-    lines += textwrap.wrap(data_line(claim, files), WRAP)[:2]
-    return "\n".join(lines)
+def commentary(claim: dict, files: dict[str, list[str]]) -> str:
+    """The companion text of a claim figure, written beside it as `<id>.commentary.md`: the claim's id, its statement, the result
+    line (estimate, interval, units, claimed value, verdict, p, R squared, the checker's reason) and the rows and files the points
+    came from. Until 2026-11-12 this was drawn on the canvas as a suptitle; it is everything a caption has no room for."""
+    return "\n\n".join([f"# {claim.get('id')}", statement(claim), result_line(claim), data_line(claim, files)]) + "\n"
+
+
+def caption(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: list[str] | None = None,
+            identity_line: bool = False) -> str:
+    """The caption drawn BENEATH the axes, at most two lines: the claim id, the data files, how many points, what one point is,
+    and every other mark that is drawn (the colours, the y = x line). No statement, no verdict and no statistics: those are in the
+    companion `<id>.commentary.md` (`commentary`). The data does the work on the canvas; the caption says what the marks are."""
+    cid = str(claim.get("id"))
+    if not n_points:
+        return f"{cid}: no points could be drawn; the reason is in {cid}.commentary.md."
+    ds = sorted({str(d) for d in (claim.get("x_dataset"), claim.get("y_dataset")) if d is not None})
+    unit = claim.get("resampling_unit")
+    n_units = len(set(units)) if units else None
+    marks = "One point is one row"
+    if n_units and 1 < n_units <= MAX_UNIT_COLOURS:
+        marks += f", coloured by {unit}"
+    marks += "." + (" The line is y = x." if identity_line else "")
+    size = f"{n_points} rows" + (f", {n_units} {unit}(s)" if n_units and unit else "")
+    for where in ("; ".join(", ".join(files.get(d, [])) for d in ds if files.get(d)), ", ".join(str(d) for d in ds), ""):
+        text = f"{cid}: " + (f"{where}; " if where else "") + f"{size}. {marks}"
+        lines = textwrap.wrap(text, WRAP)
+        if len(lines) <= 2:
+            return "\n".join(lines)
+    return "\n".join(textwrap.wrap(text, WRAP, max_lines=2, placeholder=" ..."))
 
 
 def pairs_for(root: Path, ctx: dict, claim: dict, sets: dict) -> tuple[list[tuple[float, float]], list[str] | None, str, str]:
@@ -149,17 +180,30 @@ def pairs_for(root: Path, ctx: dict, claim: dict, sets: dict) -> tuple[list[tupl
     return pairs, clusters, x, y
 
 
-def draw(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]], out: Path) -> None:
+def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]]):
+    """The matplotlib Figure of one claim, not yet saved or closed.
+
+    THE LAYOUT (2026-11-12): axes, axis labels with units, a legend only where there is more than one series, and a caption of at
+    most two lines beneath. Nothing else is on the canvas: no suptitle, no title, no text block, no background grid. Until that date
+    the figure carried the claim's statement, result and data as a suptitle of up to a dozen lines, the verdict word as a title, a
+    grid, and, for a claim with no points, a paragraph in the middle of an empty canvas. All of that text is now in the companion
+    `<id>.commentary.md`.
+
+    Every mark is defined. Points are one colour unless they are coloured by resampling unit, and then the legend names each unit;
+    the colour no longer encodes the verdict, which the canvas does not state. The y = x line is drawn only when both columns
+    declare the same unit and is named in the caption. A claim with no points gets empty axes with their labels and a caption
+    saying so, so that an absent figure is never read as an oversight."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    verdict = str(claim.get("verdict", "unverifiable"))
-    cap = caption(claim, files)
+    identity = bool(pairs) and bool(claim.get("x_unit")) and claim.get("x_unit") == claim.get("y_unit")
+    cap = caption(claim, files, len(pairs), clusters, identity)
     n_lines = cap.count("\n") + 1
-    line_in = 8 * 1.3 / 72                                        # one caption line at 8 pt with line spacing 1.3, in inches
-    fig_h = 5.6 + n_lines * line_in
+    line_in = CAPTION_PT * 1.3 / 72                               # one caption line with line spacing 1.3, in inches
+    cap_in = n_lines * line_in + 0.16
+    fig_h = 5.2 + cap_in
     fig, ax = plt.subplots(figsize=(8.6, fig_h))
     if pairs:
         xs = [a for a, _ in pairs]
@@ -172,20 +216,22 @@ def draw(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str
                 ax.plot([xs[k] for k in sel], [ys[k] for k in sel], "o", ms=4, alpha=0.8, color=cmap(i % 20), label=lab)
             ax.legend(fontsize=6, ncol=2, title=claim.get("resampling_unit"), title_fontsize=7, loc="best")
         else:
-            ax.plot(xs, ys, "o", ms=3 if len(xs) > 200 else 5, alpha=0.35 if len(xs) > 200 else 0.8, color=COLOUR.get(verdict, "k"))
-        if claim.get("x_unit") and claim.get("x_unit") == claim.get("y_unit"):
+            ax.plot(xs, ys, "o", ms=3 if len(xs) > 200 else 5, alpha=0.35 if len(xs) > 200 else 0.8, color=POINT_COLOUR)
+        if identity:
             lo, hi = min(min(xs), min(ys)), max(max(xs), max(ys))
-            ax.plot([lo, hi], [lo, hi], "k-", lw=0.6, label="y = x")
-        ax.set_xlabel(f"{claim['x']} ({claim.get('x_unit') or 'unit not declared'})")
-        ax.set_ylabel(f"{claim['y']} ({claim.get('y_unit') or 'unit not declared'})")
-        ax.grid(alpha=0.25)
-    else:
-        ax.axis("off")
-        ax.text(0.5, 0.5, "\n".join(textwrap.wrap(f"No points: {claim.get('why', 'not measured')}", 70)), ha="center", va="center",
-                fontsize=10, color=COLOUR.get(verdict, "k"), transform=ax.transAxes)
-    fig.suptitle(cap, fontsize=8, x=0.02, y=1 - 0.08 / fig_h, ha="left", va="top", color="k", linespacing=1.3)
-    ax.set_title(verdict.upper(), fontsize=10, color=COLOUR.get(verdict, "k"), loc="right")
-    fig.tight_layout()                                            # makes room for the suptitle itself
+            ax.plot([lo, hi], [lo, hi], "k-", lw=0.6)
+    ax.set_xlabel(f"{claim.get('x', x)} ({claim.get('x_unit') or 'unit not declared'})")
+    ax.set_ylabel(f"{claim.get('y', y)} ({claim.get('y_unit') or 'unit not declared'})")
+    ax.grid(False)
+    fig.tight_layout(rect=(0, cap_in / fig_h, 1, 1))              # the axes above, the caption strip beneath
+    fig.text(0.02, 0.08 / fig_h, cap, fontsize=CAPTION_PT, ha="left", va="bottom", color="k", linespacing=1.3)
+    return fig
+
+
+def draw(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[str]], out: Path) -> None:
+    fig = figure(claim, pairs, clusters, x, y, files)             # selects the Agg backend before pyplot is used
+    import matplotlib.pyplot as plt
+
     fig.savefig(out, dpi=130)
     plt.close(fig)
 
@@ -266,8 +312,13 @@ def build(root: Path | str, out_dir: Path | str) -> list[dict]:
         path = out_dir / f"{claim['id']}.png"
         with _styled(params):
             draw(claim, pairs, clusters, x, y, files, path)
-        index.append({"id": claim["id"], "verdict": claim.get("verdict"), "n_points": len(pairs), "figure": str(path.relative_to(root))
-                      if path.is_relative_to(root) else str(path), **styled})
+        note = out_dir / f"{claim['id']}.commentary.md"
+        note.write_text(commentary(claim, files))                 # what the canvas no longer carries: statement, result, verdict, data
+
+        def rel(p: Path) -> str:
+            return str(p.relative_to(root)) if p.is_relative_to(root) else str(p)
+        index.append({"id": claim["id"], "verdict": claim.get("verdict"), "n_points": len(pairs), "figure": rel(path),
+                      "commentary": rel(note), **styled})
     (out_dir / "index.json").write_text(json.dumps(index, indent=1) + "\n")
     return index
 

@@ -371,3 +371,54 @@ def test_a_median_of_one_unit_or_of_an_empty_column_reads_unverifiable_and_does_
     d = check(_project(tmp_path / "none", rows, _median_claim("m", "median", 0.0, 1.0), _MVARS, resampling_unit="unit"))
     got = d["relationships"][0]
     assert got["verdict"] == UNVERIFIABLE and got.get("estimate") is None
+
+
+# ---------------------------------------------------------------------------
+# Added 2026-11-12 from an independent review of the rank transform and the bootstrap
+# ---------------------------------------------------------------------------
+
+def test_spearman_gives_tied_values_their_average_rank():
+    """Hand-ranked: x has ranks 1.5, 1.5, 3, 4.5, 4.5 and y has 1, 2.5, 2.5, 4, 5, so Spearman is Pearson on those. Ordering the
+    ties by position instead would give a different number, which the second assertion requires."""
+    from claimcheck.relate import spearman
+    xs, ys = [1.0, 1.0, 2.0, 3.0, 3.0], [0.0, 5.0, 5.0, 7.0, 9.0]
+    expected = pearson([1.5, 1.5, 3.0, 4.5, 4.5], [1.0, 2.5, 2.5, 4.0, 5.0])
+    assert spearman(xs, ys) == pytest.approx(expected, abs=1e-12)
+    assert spearman(xs, ys) != pytest.approx(pearson([1.0, 2.0, 3.0, 4.0, 5.0], [1.0, 2.0, 3.0, 4.0, 5.0]), abs=1e-6)
+    stats = pytest.importorskip("scipy.stats")
+    rng = random.Random(31)
+    for _ in range(10):
+        a = [float(rng.randrange(6)) for _ in range(200)]
+        b = [float(round(0.4 * v + rng.gauss(0, 1))) for v in a]
+        assert spearman(a, b) == pytest.approx(stats.spearmanr(a, b).statistic, abs=1e-12)
+
+
+def test_no_bootstrap_draw_ever_splits_a_unit():
+    """Every row carries a unique id in x and units hold 1 to 5 rows. In each of the 2,000 draws all rows of a unit must appear the
+    same number of times. The control is the same detector with no unit declared, where it must fire on nearly every draw."""
+    from collections import Counter
+    rng = random.Random(8)
+    clusters, pairs = [], []
+    for u in range(30):
+        for _ in range(rng.randint(1, 5)):
+            clusters.append(f"u{u}")
+            pairs.append((float(len(pairs)), rng.gauss(0, 1)))
+    unit_of = {int(p[0]): c for p, c in zip(pairs, clusters, strict=True)}
+    size_of = Counter(clusters)
+    seen = {"draws": 0, "split": 0, "sizes": set()}
+
+    def recording(xs, ys):
+        per_unit: dict[str, list[int]] = {}
+        for row_id, m in Counter(int(v) for v in xs).items():
+            per_unit.setdefault(unit_of[row_id], []).append(m)
+        whole = all(len(ms) == size_of[u] and len(set(ms)) == 1 for u, ms in per_unit.items())
+        seen["draws"] += 1
+        seen["split"] += not whole
+        seen["sizes"].add(sum(ms[0] for ms in per_unit.values()))
+        return pearson(xs, ys)
+
+    _, _, n_units = bootstrap_ci(pairs, clusters, estimate=recording)
+    assert n_units == 30 and seen["split"] == 0 and seen["sizes"] == {30} and seen["draws"] > 1000
+    seen.update(draws=0, split=0, sizes=set())
+    bootstrap_ci(pairs, None, estimate=recording)
+    assert seen["split"] > 0.9 * seen["draws"]
