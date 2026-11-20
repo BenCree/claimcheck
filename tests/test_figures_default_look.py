@@ -3,7 +3,19 @@
 The strongest statement available is a stored figure. `fixtures/figstyle/golden/MANIFEST.json` holds the sha256 of every figure below, of the PNG bytes
 and of the decoded pixels, drawn by the `claimcheck/figures.py` whose sha256 the manifest records. These tests draw the same inputs again and compare.
 One case per branch of `draw` (points coloured by unit with a key and y = x; many points in one colour; few points in one colour; a value claim, whose
-x = y gets no reference line; no points), and a three-claim project through `build`, whose `index.json` is compared too.
+x = y is spread over the resampling unit under horizontal lines at the claim's own numbers; no points), and a three-claim project through `build`, whose
+`index.json` is compared too.
+
+The `draw/value` digests were redrawn on 2026-11-17, and only those: a one-column claim used to be plotted against itself, which put every point on the
+diagonal and showed nothing about the spread the interval is taken over. The value now goes up the y axis and the resampling unit along the x axis, with
+the claimed bounds and the estimate as named horizontal lines. That is a change to the figure contract, not a failing test made to pass; the other four
+cases and every `build` digest are the ones stored before it.
+
+They were redrawn again on 2026-11-20, and again only those: those horizontal lines were all drawn `color="k"` with the name discarded, so the claimed
+lower bound, the claimed upper bound and the estimate were THREE IDENTICAL BLACK LINES WITH NO KEY, indistinguishable from one another and exactly
+coincident whenever `claimed` equals the estimate. The figure asserted three different things with one mark. Each line now carries its own dash pattern
+and its name in the key, which the house rule permits wherever there is more than one series and which the Nature guide asks for in place of a colour or
+line description given elsewhere. The same containment holds: only `draw/value` moved, and the other four cases and every `build` digest are unchanged.
 
 The look pinned here is the one the project owner asked for on 2026-11-13: no words on the canvas beyond the axis labels, the tick labels and the key, no
 grid, no box frame, no minor ticks, 183 mm wide, 7 pt text, at 300 dpi. The figures pinned before that date carried a caption of up to two lines beneath

@@ -1,6 +1,6 @@
 {
  "about": "sha256 of claim figures drawn with no style. Written by CLAIMCHECK_UPDATE_GOLDEN=1 pytest tests/test_figures_default_look.py",
- "figures_py_sha256": "0740d7b24f0cf47a38d358f7bd84dc3b8f581fe1fb3f5c16f4cddb54f7d3fc02",
+ "figures_py_sha256": "9f3b1ff709372a7acf8b46f070e71a4a8d8da6ebe111fb5be33ec9cdca926c14",
  "environment": {
   "matplotlib": "3.11.1",
   "freetype": "2.14.3",
@@ -21,8 +21,8 @@
    "pixels_sha256": "21cf1651f2c5b937a5165b36dfad053e5a84c0d566facffe6840be80ab24025b"
   },
   "value": {
-   "png_sha256": "1f4887cc75f8f86d1e7e8fedeb2dbda970fe51ba3d8247f5e7c35da88b87fe02",
-   "pixels_sha256": "91160a69df78bbf2355e62a2d6646a21891009cfb7d3ba5d5aacc4fdc8bcc330"
+   "png_sha256": "1c362a01759343f910c08ea8b029f847aaa0b7970aa101dcc264c58b7abd9198",
+   "pixels_sha256": "0a40cf709b37427c33d5718285fddba4ad7f278f8bc9ad6a64b3fbfa3802a590"
   },
   "nopoints": {
    "png_sha256": "62eb66d3b27fa7ae35509233da032add44bf8cec2fa1a3b286ebd5ef8bc7ba81",

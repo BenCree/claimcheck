@@ -106,6 +106,12 @@ PAD_IN = 0.4                                # tight_layout's margin, in font-siz
 #: ("medium" for axis labels, tick labels and the key), so one key is enough and a style setting any of them still wins.
 TEXT_RC = {"font.size": TEXT_PT}
 MAX_UNIT_COLOURS = 20
+
+#: On a value figure the resampling unit is categorical, so its tick labels are the
+#: unit names. Above this many they overlap, which the guide's "We avoid ...
+#: Overlapping text" forbids, so the labels are dropped and the points kept: the
+#: points are the data and the labels are navigation. Our choice, no source.
+MAX_UNIT_TICKS = 24
 STYLE_KEY = "figstyle"                      # in [project] of context.toml
 STYLE_ENV = "CLAIMCHECK_FIGSTYLE"           # the same, from the environment; the key wins
 
@@ -183,6 +189,60 @@ def identity_drawn(claim: dict, pairs: list) -> bool:
             and str(claim.get("x")) != str(claim.get("y")))
 
 
+def value_scatter(claim: dict, pairs: list) -> bool:
+    """Whether this claim's points should be spread across the resampling unit instead of plotted against themselves.
+
+    A `kind = "value"` claim declares `x = y`: the mean of a column, a fraction, a sign test. Drawing it as x against y put
+    every point on the diagonal, where the figure carried the numbers and showed nothing about them: not the spread, not an
+    outlier, not whether one resampling unit carries the result. The owner asked twice for every claim to get a real scatter
+    (2026-11-13), and this is what that means for a one-column claim.
+
+    So the value goes up the y axis and the resampling unit goes along the x axis, which is the axis the interval is taken over.
+    The claimed value, or the two bounds of a claimed range, and the estimate are drawn as reference lines and defined in the
+    commentary. Where no resampling unit is declared the points spread over file order, which at least shows the distribution.
+    """
+    return bool(pairs) and str(claim.get("x")) == str(claim.get("y"))
+
+
+def value_points(pairs, clusters):
+    """(xs, ys, tick positions, tick labels) for a value claim: one column of points per resampling unit, in unit order.
+
+    The unit is categorical, so the x position is an index and the tick labels name the units. More than
+    `MAX_UNIT_TICKS` of them and the labels are dropped rather than overlapped, which the guide's "We avoid ... Overlapping
+    text" forbids; the points stay, because they are the data.
+    """
+    ys = [b for _, b in pairs]
+    if not clusters or len(set(clusters)) < 2:
+        return list(range(len(ys))), ys, [], []
+    order = sorted(set(clusters))
+    index = {lab: i for i, lab in enumerate(order)}
+    xs = [index[c] for c in clusters]
+    if len(order) <= MAX_UNIT_TICKS:
+        return xs, ys, list(range(len(order))), [str(o) for o in order]
+    return xs, ys, [], []
+
+
+def value_lines(claim: dict) -> list[tuple[float, str]]:
+    """The horizontal reference lines on a value figure: the claim's own bounds and its estimate, each with a name.
+
+    Nothing is drawn that the claim does not state. An open side of a `claimed_range` is written as an infinity and has no
+    line, because a bound at infinity is not a position on the canvas.
+    """
+    out: list[tuple[float, str]] = []
+    claimed = claim.get("claimed")
+    if isinstance(claimed, (int, float)):
+        out.append((float(claimed), "claimed"))
+    rng = claim.get("claimed_range")
+    if isinstance(rng, (list, tuple)) and len(rng) == 2:
+        for v, name in zip(rng, ("claimed lower bound", "claimed upper bound")):
+            if isinstance(v, (int, float)) and math.isfinite(float(v)):
+                out.append((float(v), name))
+    est = claim.get("estimate")
+    if isinstance(est, (int, float)) and math.isfinite(float(est)):
+        out.append((float(est), "estimate"))
+    return out
+
+
 def marks(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: list[str] | None = None,
           identity_line: bool = False, x: str = "", y: str = "") -> str:
     """The caption: what one point is, how many there are, what each colour and each line means, and that no error bars are drawn.
@@ -212,6 +272,20 @@ def marks(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: li
         out.append(f"{n_units} {unit}(s), all points one colour, because more than {MAX_UNIT_COLOURS} colours cannot be read.")
     if identity_line:
         out.append(f"The straight line is y = x, at {LINE_PT} pt; both columns are in {claim.get('x_unit')}.")
+    elif value_scatter(claim, [(0, 0)]):
+        # A one-column claim: the value is spread over its resampling unit rather
+        # than plotted against itself, and the horizontal lines are the claim's own
+        # numbers. Each is named here, because an undefined line is decoration.
+        lines = value_lines(claim)
+        if lines:
+            named = "; ".join(f"{name} at {v:g}" for v, name in lines)
+            out.append(f"The value is spread over the {unit or 'row'} on the x axis, which is the axis "
+                       f"the interval is taken over, not a second measured quantity. The horizontal "
+                       f"lines, each at {LINE_PT} pt, are {named}.")
+        else:
+            out.append(f"The value is spread over the {unit or 'row'} on the x axis, which is the axis "
+                       "the interval is taken over, not a second measured quantity. No reference line "
+                       "is drawn, because the claim states no finite bound.")
     else:
         out.append("No reference line is drawn.")
     # The interval's kind is not named here: it is a bootstrap for most methods, Clopper-Pearson for binomial_count and
@@ -283,9 +357,48 @@ def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[s
     import matplotlib.pyplot as plt
 
     identity = identity_drawn(claim, pairs)
+    spread = value_scatter(claim, pairs)
     with matplotlib.rc_context({k: v for k, v in TEXT_RC.items() if k not in set_by_style}):
         fig, ax = plt.subplots(figsize=(FIG_W_IN, FIG_H_IN))
-        if pairs:
+        if pairs and spread:
+            # A one-column claim: the value up the y axis, the resampling unit along
+            # the x axis. Plotting it against itself put every point on the diagonal
+            # and showed nothing about the spread, which is the whole reason a value
+            # claim has an interval.
+            xs, ys, ticks, ticklabels = value_points(pairs, clusters)
+            labels = sorted(set(clusters)) if clusters else []
+            if clusters and 1 < len(labels) <= MAX_UNIT_COLOURS:
+                cmap = plt.get_cmap("tab20")
+                for i, lab in enumerate(labels):
+                    sel = [k for k, c in enumerate(clusters) if c == lab]
+                    ax.plot([xs[k] for k in sel], [ys[k] for k in sel], "o", ms=4,
+                            alpha=0.8, color=cmap(i % 20), label=lab)
+                ax.legend(ncol=2, title=claim.get("resampling_unit"), loc="best", frameon=False)
+            else:
+                ax.plot(xs, ys, "o", ms=3 if len(xs) > 200 else 5,
+                        alpha=0.35 if len(xs) > 200 else 0.8, color=POINT_COLOUR)
+            # Each reference line carries its own dash pattern and its name in the key. What this
+            # replaced (2026-11-20, project owner) drew the claimed lower bound, the claimed upper
+            # bound and the estimate as THREE IDENTICAL BLACK LINES WITH NO KEY, discarding the
+            # name: indistinguishable from one another, and exactly coincident whenever claimed
+            # equals the estimate, so the figure asserted three different things with one mark. The
+            # guide asks for a key in place of a description given elsewhere, and the house rule
+            # permits one wherever there is more than one series, which three lines are.
+            for value, name in value_lines(claim):
+                ax.axhline(value, color="k", lw=LINE_PT, label=name,
+                           ls="-" if name == "estimate" else ("--" if name == "claimed" else ":"))
+            if value_lines(claim):
+                # One legend for the whole axes, drawn after the lines so it carries both the unit
+                # colours and the line names; calling ax.legend twice replaces rather than adds. No
+                # title here, because the key now mixes units with reference lines and a unit title
+                # over both would be false.
+                _, _labels = ax.get_legend_handles_labels()
+                if len(_labels) > 1:
+                    ax.legend(ncol=2, loc="best", frameon=False)
+            if ticks:
+                ax.set_xticks(ticks)
+                ax.set_xticklabels(ticklabels, rotation=90 if len(ticks) > 6 else 0)
+        elif pairs:
             xs = [a for a, _ in pairs]
             ys = [b for _, b in pairs]
             labels = sorted(set(clusters)) if clusters else []
@@ -302,8 +415,12 @@ def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[s
             if identity:
                 lo, hi = min(min(xs), min(ys)), max(max(xs), max(ys))
                 ax.plot([lo, hi], [lo, hi], "k-", lw=LINE_PT)
-        ax.set_xlabel(axis_label(claim, "x", x))
-        ax.set_ylabel(axis_label(claim, "y", y))
+        if spread:
+            ax.set_xlabel(claim.get("resampling_unit") or "row (file order)")
+            ax.set_ylabel(axis_label(claim, "y", y))
+        else:
+            ax.set_xlabel(axis_label(claim, "x", x))
+            ax.set_ylabel(axis_label(claim, "y", y))
         ax.grid(False)                                            # the guide's "We avoid": "Background gridlines"
         for side in ("top", "right"):                             # our choice, no source: not axis lines, and no data on them
             ax.spines[side].set_visible(False)
