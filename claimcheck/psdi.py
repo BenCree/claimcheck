@@ -143,7 +143,8 @@ def build(root: Path | str) -> Graph:
     """
     root = Path(root)
     ctx = tomllib.loads((root / "context.toml").read_text())
-    proj = ctx["project"]
+    from claimcheck.emit import project_table
+    proj = project_table(ctx)
     meta = ctx.get("psdi", {})
 
     g = Graph()

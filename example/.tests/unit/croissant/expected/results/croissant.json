@@ -56,8 +56,8 @@
   "distribution": [
     {
       "@type": "cr:FileObject",
-      "@id": "mace_energies_csv",
-      "name": "mace_energies_csv",
+      "@id": "data_mace_energies_csv",
+      "name": "data_mace_energies_csv",
       "contentUrl": "../data/mace_energies.csv",
       "encodingFormat": "text/csv",
       "sha256": "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606",
@@ -65,8 +65,8 @@
     },
     {
       "@type": "cr:FileObject",
-      "@id": "experimental_affinity_csv",
-      "name": "experimental_affinity_csv",
+      "@id": "data_experimental_affinity_csv",
+      "name": "data_experimental_affinity_csv",
       "contentUrl": "../data/experimental_affinity.csv",
       "encodingFormat": "text/csv",
       "sha256": "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628",
@@ -79,19 +79,19 @@
   "recordSet": [
     {
       "@type": "cr:RecordSet",
-      "@id": "mace_energies_csv_records",
-      "name": "mace_energies_csv_records",
+      "@id": "data_mace_energies_csv_records",
+      "name": "data_mace_energies_csv_records",
       "https://w3id.org/claimcheck/ns#dataset": "mace",
       "field": [
         {
           "@type": "cr:Field",
-          "@id": "mace_energies_csv_records/e_int_kcal",
+          "@id": "data_mace_energies_csv_records/e_int_kcal",
           "name": "e_int_kcal",
           "description": "MACE-OFF interaction energy. Converted from eV by the prepare rule.",
           "dataType": "sc:Float",
           "source": {
             "fileObject": {
-              "@id": "mace_energies_csv"
+              "@id": "data_mace_energies_csv"
             },
             "extract": {
               "column": "e_int_kcal"
@@ -102,13 +102,13 @@
         },
         {
           "@type": "cr:Field",
-          "@id": "mace_energies_csv_records/n_lig_atoms",
+          "@id": "data_mace_energies_csv_records/n_lig_atoms",
           "name": "n_lig_atoms",
           "description": "Ligand heavy-atom count \u2014 the obvious size confound.",
           "dataType": "sc:Integer",
           "source": {
             "fileObject": {
-              "@id": "mace_energies_csv"
+              "@id": "data_mace_energies_csv"
             },
             "extract": {
               "column": "n_lig_atoms"
@@ -117,23 +117,24 @@
           "https://w3id.org/claimcheck/ns#unit": "1",
           "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
         }
-      ]
+      ],
+      "description": "MACE-OFF pocket-ligand interaction energies"
     },
     {
       "@type": "cr:RecordSet",
-      "@id": "experimental_affinity_csv_records",
-      "name": "experimental_affinity_csv_records",
+      "@id": "data_experimental_affinity_csv_records",
+      "name": "data_experimental_affinity_csv_records",
       "https://w3id.org/claimcheck/ns#dataset": "affinity",
       "field": [
         {
           "@type": "cr:Field",
-          "@id": "experimental_affinity_csv_records/experimental_pKD",
+          "@id": "data_experimental_affinity_csv_records/experimental_pKD",
           "name": "experimental_pKD",
           "description": "Measured affinity as pKD. Dimensionless: it is a log ratio.",
           "dataType": "sc:Float",
           "source": {
             "fileObject": {
-              "@id": "experimental_affinity_csv"
+              "@id": "data_experimental_affinity_csv"
             },
             "extract": {
               "column": "experimental_pKD"
@@ -142,7 +143,8 @@
           "https://w3id.org/claimcheck/ns#unit": "1",
           "https://w3id.org/claimcheck/ns#unitSystem": "UDUNITS-2"
         }
-      ]
+      ],
+      "description": "Measured binding affinities as pKD"
     }
   ],
   "https://w3id.org/claimcheck/ns#joins": [
@@ -168,6 +170,9 @@
       "crossDataset": true,
       "method": "pearson",
       "claimed": -0.5,
+      "claimedRange": null,
+      "claimedLow": null,
+      "claimedHigh": null,
       "estimate": -0.450348,
       "ciLow": -0.50922,
       "ciHigh": -0.388048,
@@ -177,7 +182,8 @@
       "why": "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)",
       "evidenceSource": "the premise of MACE triage: interaction energy ranks affinity well enough to spend the free-energy budget on the top slice",
       "evidenceLocator": "example/context.toml#relationship-1",
-      "extractedBy": "human"
+      "extractedBy": "human",
+      "level": null
     },
     {
       "x": "mace.e_int_kcal",
@@ -187,6 +193,9 @@
       "crossDataset": false,
       "method": "pearson",
       "claimed": 0.0,
+      "claimedRange": null,
+      "claimedLow": null,
+      "claimedHigh": null,
       "estimate": -0.589335,
       "ciLow": -0.650623,
       "ciHigh": -0.525401,
@@ -196,7 +205,8 @@
       "why": "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)",
       "evidenceSource": "the assumption the triage rests on: the energy measures interaction, not size",
       "evidenceLocator": "example/context.toml#relationship-2",
-      "extractedBy": "human"
+      "extractedBy": "human",
+      "level": null
     }
   ]
 }

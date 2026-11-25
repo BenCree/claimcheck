@@ -80,16 +80,50 @@ rule check_claims:
     """
     input:
         data=CLAIMCHECK_DATA,
+        # `ancient()`: the modification time of the declaration does not decide
+        # whether a verdict is stale. WHICH FIELDS IT HOLDS DOES, and that is
+        # the `params` digest below. Dropping `ancient()` instead would
+        # re-adjudicate on every edit to the file, including the `evidence.note`
+        # this lab adds constantly, and would do nothing at all under the
+        # `--rerun-triggers code input params software-env` this lab uses so a
+        # script edit cannot delete a running campaign's outputs
+        # (projects/z-ml/experiments/complex_panel/LOG.md, decision 3).
         context=ancient(_PROJECT / "context.toml"),
     output:
         "results/claims.json",
+    params:
+        # EDITING A CLAIMED VALUE RE-ADJUDICATES THE CLAIM. Until 2026-11-22 it
+        # did not: `ancient()` above hid the edit, so `results/claims.json` kept
+        # a verdict computed from the previous declaration while carrying a
+        # `context_sha256` that no longer matched the file beside it.
+        #
+        # `params` is one of Snakemake's default rerun triggers, recorded per
+        # output and compared on the next parse, so `claimed`, `method`,
+        # `resampling_unit`, `x`, `y`, `baseline` and every other key an
+        # estimator reads retrigger, while an `evidence.note`, a title, a
+        # description and a comment do not. `claimcheck.workflow.verdict_digest`
+        # says why that list is a denylist and not an allowlist.
+        #
+        # NOT REFERENCED BY THE SHELL COMMAND BELOW, which is not an oversight:
+        # its only job is to be recorded and compared. Delete it and the defect
+        # returns, which `tests/test_context_retrigger.py` demonstrates by
+        # pinning it to a constant and watching an edited claim go unnoticed.
+        verdict_fields=_cw.verdict_digest(_PROJECT),
     # ONE FIGURE PER CLAIM BY DEFAULT, as a side effect and not a declared output. A project that defines its own `claim_figures` rule with
     # `output: directory("figures/claims")` would otherwise have two rules producing one path (AmbiguousRuleException). The figure step cannot
     # fail the rule: Snakemake deletes the outputs of a failed job, and the verdicts are the product; a failure prints a warning instead.
+    #
+    # THEN THE VERDICTS ARE SCRUTINISED, in the same rule and with the same licence to fail: a claim that could not have failed, a control that
+    # came back refuted, and a number in this directory's own prose that contradicts the row it quotes (`claimcheck.scrutiny`). `relate` already
+    # prints the first two from the rows; this step is what reads the prose beside them, which needs the files and so cannot be done in `relate`.
+    # It changes no verdict, it never fails the rule, and it is here rather than on a person's checklist because a check that fires is worth more
+    # than a reader who is not always there (2026-11-17, after all three shapes were found by hand).
     shell:
         f"{_ENV} {_PY} -m claimcheck.relate . {{output}} && "
         f"({_ENV} {_PY} -m claimcheck.figures . figures/claims || "
-        f"echo 'WARNING: claimcheck.figures failed; results/claims.json is written, figures/claims is not' >&2)"
+        f"echo 'WARNING: claimcheck.figures failed; results/claims.json is written, figures/claims is not' >&2) && "
+        f"({_ENV} {_PY} -m claimcheck.scrutiny . || "
+        f"echo 'WARNING: claimcheck.scrutiny failed; the verdicts stand unscrutinised' >&2)"
 
 
 rule belief:
@@ -120,7 +154,22 @@ rule croissant:
 
 
 rule graph:
-    """The claims and their provenance as RDF."""
+    """The claims and their provenance as RDF.
+
+    AFTER THE GRAPH IS WRITTEN, an optional site hook runs: whatever is in the
+    environment variable `CLAIMCHECK_AFTER_RESULT`. A result is finished when it
+    has entered the corpus, and in a lab with a dashboard that means the page
+    showing the corpus is stale the moment this rule finishes. Rather than every
+    project remembering to refresh it, the refresh is named once in the
+    environment and happens here.
+
+    It is an environment variable and not a path in this package because
+    claimcheck must install and run for a stranger with no dashboard, no lab
+    layout and no cluster. The hook is given the project directory as its one
+    argument, it is run from that directory, and its FAILURE IS NOT THIS RULE'S
+    FAILURE: a page that will not rebuild must never cost a project its graph.
+    The exit status is reported and discarded.
+    """
     input:
         croissant="results/croissant.json",
         claims="results/claims.json",
@@ -128,7 +177,22 @@ rule graph:
     output:
         "results/graph.ttl",
     shell:
-        f"{_ENV} {_PY} -m claimcheck.graph . {{output}}"
+        f"{_ENV} {_PY} -m claimcheck.graph . {{output}} && "
+        # Snakemake formats the whole shell string, so a literal shell brace must be DOUBLED or it is read as a
+        # format field and the DAG dies with `NameError: The name 'CLAIMCHECK_AFTER_RESULT' is unknown in this
+        # context`, in every project that includes these rules (2026-11-13).
+        # DEFAULT ON, not opt-in (owner, 2026-11-13: "dashboard as default", "need to
+        # auto update dashboard"). With no environment variable set, a conventional
+        # path is used, and a machine with no such file simply has no hook. That keeps
+        # the package installable by a stranger with no dashboard while making the
+        # refresh automatic here, which an environment variable never was: it had to
+        # be exported into every shell that ever ran Snakemake, and so it never fired.
+        '_hook="${{CLAIMCHECK_AFTER_RESULT:-$HOME/.config/claimcheck/after_result}}"; '
+        'if [ -x "$_hook" ]; then '
+        '  echo "after-result hook: $_hook"; '
+        '  "$_hook" "$PWD" '
+        '    || echo "after-result hook failed (exit $?); the graph above is written and valid"; '
+        "fi"
 
 
 rule dcat:

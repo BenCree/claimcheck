@@ -91,7 +91,8 @@ def _download_url(root: Path, rel: str, out_dir: Path | str | None) -> str:
 def build(root: Path | str, out_dir: Path | str | None = None) -> Graph:
     root = Path(root)
     ctx = tomllib.loads((root / "context.toml").read_text())
-    proj = ctx["project"]
+    from claimcheck.emit import project_table
+    proj = project_table(ctx)
     claims_file = root / "results" / "claims.json"
     claims = (json.loads(claims_file.read_text())
               if claims_file.is_file() else {"relationships": []})

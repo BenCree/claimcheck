@@ -50,6 +50,19 @@ _BUILTIN = {
                 "RO-Crate 1.1 — the whole directory, named and hashed"),
 }
 
+#: module -> the extra whose packages it may import, for modules that are NOT
+#: formats. `_BUILTIN` is the registry of things `emit` can render, and every
+#: entry in it must have a `render(root)`; a module that CONSUMES an extra's
+#: package without emitting a format has no entry there and still has to be
+#: allowed to import it. `tests/test_dependencies.py` reads both.
+#:
+#: `claimcheck.corpus` merges many projects' graphs into one store, so it needs
+#: rdflib for the same reason `graph` does, and `render(root)` means nothing for
+#: it: a format writes one project's file and this one reads hundreds.
+_EXTRA_CONSUMERS = {
+    "claimcheck.corpus": "graph",
+}
+
 #: extra -> the module whose presence proves the extra is installed. Declared
 #: rather than inferred: `psdi` needs `pyshacl` AND `rdflib`, and `find_spec` on
 #: `claimcheck.psdi` would say yes on an install that has neither, because our
@@ -143,3 +156,39 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ---------------------------------------------------------------- project table
+
+
+def project_table(ctx: dict) -> dict:
+    """`ctx["project"]`, with the British spelling of `licence` accepted.
+
+    Every emitter here reads `license`, the US spelling, because that is the key
+    Croissant, DCAT and RO-Crate all use. A project that writes `licence` was
+    silently publishing NO licence at all: the declaration sat in context.toml,
+    nothing read it, and the package went out unlicensed. Found 2026-11-13 in 13
+    experiments at once, which is what a silent failure looks like.
+
+    So the alias is accepted and a warning is printed naming the file to fix. It
+    is accepted rather than merely warned about because the intent is
+    unambiguous and the alternative is publishing an unlicensed package, which
+    is the worse of the two failures. Declaring BOTH with different values is an
+    error, not a merge: nothing here may choose which licence a project meant.
+    """
+    proj = dict(ctx.get("project") or {})
+    uk = proj.pop("licence", None)
+    if uk is None:
+        return proj
+    us = proj.get("license")
+    if us is not None and str(us).strip() != str(uk).strip():
+        raise ValueError(
+            f"context.toml declares license = {us!r} and licence = {uk!r}. "
+            "They differ, and nothing here may choose between them. Keep one.")
+    if us is None:
+        print(f"warning: context.toml declares `licence`; the emitters read "
+              f"`license`. Using {uk!r}, but rename the key: every other reader "
+              "of this file, and every tool downstream, uses the US spelling.",
+              file=sys.stderr)
+        proj["license"] = uk
+    return proj

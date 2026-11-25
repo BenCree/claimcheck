@@ -250,9 +250,66 @@ def check_claim(c: Claim, nodes: set[str]) -> None:
             f"has")
 
 
+def _owner_dir(where: str, owner: str, siblings: Path | None,
+               owner_roots: tuple[Path, ...] = ()) -> Path:
+    """Which directory owns `owner`, out of the sibling dir and `owner_roots`.
+
+    **WHY A SECOND PLACE TO LOOK (2026-11-22).** `defined_in` named a SIBLING
+    and nothing else, which works only while every project that shares an owner
+    sits in one directory. This lab files an experiment by the question its
+    claims answer rather than by the method it uses (`shared/LAB.md`), so the
+    five experiments delegating to `paros_objective` ended up in three different
+    programmes: the two filed beside it resolved, and `paros_backtest`,
+    `paros_rowanfep` and `paros_ifp` could not emit a graph at all. The owner is
+    the same statement in all five cases; only the directory layout differs.
+
+    `owner_roots` are extra directories to look in, passed explicitly by the
+    caller (`--owner-root`) so the command Snakemake records says where the
+    owner was found. The one-hop rule is untouched: this widens WHERE a name is
+    looked up, never how many names are followed.
+
+    **AMBIGUITY IS REFUSED.** Two roots offering the same owner name would make
+    "who decides this" depend on argument order, so a name that resolves to two
+    different directories raises instead of taking the first. Resolved paths are
+    compared, so the same directory reached through a symlink is not two.
+    """
+    roots: list[Path] = []
+    if siblings is not None:
+        roots.append(siblings)
+    roots.extend(owner_roots)
+    if not roots:
+        raise BeliefError(
+            f"{where} is defined_in {owner!r}, but this graph was built from a "
+            f"mapping with no directory to resolve it against. Load with "
+            f"`BeliefGraph.from_project`, or pass `siblings=`")
+    found: dict[Path, Path] = {}
+    for r in roots:
+        cand = Path(r) / owner
+        if (cand / "context.toml").is_file():
+            found.setdefault(cand.resolve(), cand)
+    if len(found) > 1:
+        shown = ", ".join(str(p) for p in sorted(found.values()))
+        raise BeliefError(
+            f"{where} is defined_in {owner!r}, which resolves to "
+            f"{len(found)} different directories: {shown}. Which one decides "
+            f"the claim would depend on the order the roots were given. Pass "
+            f"only the root that owns it")
+    if found:
+        return next(iter(found.values()))
+    # THE WORDING IS LOAD-BEARING for the single-root case, which is every
+    # caller that passes no `--owner-root`: it has to keep reading as it did
+    # before 2026-11-22, because the message is what a project author sees.
+    tried = ", ".join(str(Path(r) / owner / "context.toml") for r in roots)
+    raise BeliefError(
+        f"{where} is defined_in {owner!r}, and {tried} does not exist. Name a "
+        f"sibling project directory, not a file or a path, or pass the "
+        f"directory that holds the owner with `--owner-root`")
+
+
 def _from_owner(raw: dict, where: str, owner: str,
-                siblings: Path | None) -> Claim:
-    """Read one claim's verdict out of the sibling project that owns it.
+                siblings: Path | None,
+                owner_roots: tuple[Path, ...] = ()) -> Claim:
+    """Read one claim's verdict out of the project that owns it.
 
     Loads the owner with `from_project`, so a claim settled there BY DATA — a
     `tested_by` recomputed from `results/claims.json` — arrives here already
@@ -264,12 +321,8 @@ def _from_owner(raw: dict, where: str, owner: str,
     single rule gives one-hop resolution, makes cycles impossible without cycle
     detection, and keeps "who decides this" answerable by reading one name.
     """
-    if siblings is None:
-        raise BeliefError(
-            f"{where} is defined_in {owner!r}, but this graph was built from a "
-            f"mapping with no directory to resolve it against. Load with "
-            f"`BeliefGraph.from_project`, or pass `siblings=`")
-    ctx = siblings / owner / "context.toml"
+    owner_dir = _owner_dir(where, owner, siblings, owner_roots)
+    ctx = owner_dir / "context.toml"
     if not ctx.is_file():
         raise BeliefError(
             f"{where} is defined_in {owner!r}, and {ctx} does not exist. Name a "
@@ -284,7 +337,7 @@ def _from_owner(raw: dict, where: str, owner: str,
             f"than one name, and two projects can point at each other")
 
     key = (str(raw["subject"]), str(raw["predicate"]), str(raw["object"]))
-    src = BeliefGraph.from_project(siblings / owner)
+    src = BeliefGraph.from_project(owner_dir)
     hits = [c for c in src.claims
             if (c.subject, c.predicate, c.object) == key]
     if not hits:
@@ -339,13 +392,17 @@ class BeliefGraph:
     @classmethod
     def from_dict(cls, doc: dict,
                   recomputed: dict[str, dict] | None = None,
-                  siblings: Path | None = None) -> "BeliefGraph":
+                  siblings: Path | None = None,
+                  owner_roots: tuple[Path, ...] = ()) -> "BeliefGraph":
         """Build from a plain mapping — the `[belief]` table, as parsed.
 
         `recomputed` maps `"x ~ y"` to a relationship row out of
         `results/claims.json`. Where a claim names one in `tested_by`, the
         recomputed verdict supplies its status, so validation below sees the
         status a reader will see.
+
+        `owner_roots` are extra directories in which to look for a `defined_in`
+        owner, beside `siblings`. See `_owner_dir`.
         """
         g = cls()
         for spec in doc.get("nodes") or []:
@@ -369,7 +426,7 @@ class BeliefGraph:
         # class definition.
         seen: dict[tuple, int] = {}
         for i, raw in enumerate(doc.get("claims") or []):
-            c = cls._claim(raw, i, recomputed, siblings)
+            c = cls._claim(raw, i, recomputed, siblings, owner_roots)
             check_claim(c, set(g.nodes))
             key = (c.subject, c.predicate, c.object, c.status, c.evidence)
             if key in seen:
@@ -412,7 +469,8 @@ class BeliefGraph:
 
     @staticmethod
     def _claim(raw: dict, i: int, recomputed: dict[str, dict] | None,
-               siblings: Path | None = None) -> Claim:
+               siblings: Path | None = None,
+               owner_roots: tuple[Path, ...] = ()) -> Claim:
         """One claim, with a recomputed verdict folded in where it names one."""
         where = f"claims[{i}]"
         for k in ("subject", "predicate", "object"):
@@ -427,7 +485,7 @@ class BeliefGraph:
                         f"owning project decides this claim; a second answer "
                         f"beside it is one a reader will believe. Delete the "
                         f"`{k}` line, or drop `defined_in` and own it here")
-            return _from_owner(raw, where, owner, siblings)
+            return _from_owner(raw, where, owner, siblings, owner_roots)
         tested = str(raw.get("tested_by", "") or "").strip()
         if not tested:
             if "status" not in raw:
@@ -494,7 +552,8 @@ class BeliefGraph:
                      note=str(raw.get("note", "") or ""))
 
     @classmethod
-    def from_project(cls, root: Path | str) -> "BeliefGraph":
+    def from_project(cls, root: Path | str,
+                     owner_roots: tuple[Path, ...] = ()) -> "BeliefGraph":
         """`context.toml` for the model, `results/claims.json` for the verdicts.
 
         The join between the two layers of this package: `relate` recomputes
@@ -516,7 +575,8 @@ class BeliefGraph:
         # Snakefile invokes it, looked for its siblings inside ITSELF. The
         # in-process load passed and the Snakemake rule failed.
         return cls.from_dict(doc, recomputed=cls._recomputed(root, doc),
-                             siblings=root.resolve().parent)
+                             siblings=root.resolve().parent,
+                             owner_roots=tuple(owner_roots))
 
     @staticmethod
     def _recomputed(root: Path, doc: dict) -> dict[str, dict] | None:
@@ -892,10 +952,21 @@ def render(root: Path | str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    a = argv if argv is not None else sys.argv[1:]
+    raw = argv if argv is not None else sys.argv[1:]
+    # `--owner-root <dir>`, repeatable: see `_owner_dir`. An argument and not an
+    # environment variable, so the rule's command records it (2026-11-22).
+    a, owner_roots = [], []
+    it = iter(raw)
+    for tok in it:
+        if tok == "--owner-root":
+            owner_roots.append(Path(next(it)))
+        elif tok.startswith("--owner-root="):
+            owner_roots.append(Path(tok.split("=", 1)[1]))
+        else:
+            a.append(tok)
     root = Path(a[0]) if a else Path.cwd()
     out = Path(a[1]) if len(a) > 1 else root / "results/belief.json"
-    g = BeliefGraph.from_project(root)
+    g = BeliefGraph.from_project(root, owner_roots=tuple(owner_roots))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(g.report(), indent=2) + "\n")
     for name in sorted(g.rests_on):

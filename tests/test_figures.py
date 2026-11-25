@@ -131,7 +131,15 @@ def test_the_only_words_on_a_claim_figure_are_the_axis_labels_the_tick_labels_an
     assert look["suptitle"] is None and look["titles"] == ["", "", ""]
     assert look["axes_texts"] == [] and look["fig_texts"] == []                 # no annotation, and no caption beneath the axes
     assert look["n_axes"] == 1 and not look["grid"]
-    assert look["xlabel"] == "d.a (kcal/mol)" and look["ylabel"].endswith("(kcal/mol)")
+    if figures.value_scatter(*CASES[case][:2]):
+        # A ONE-COLUMN CLAIM SPREADS ITS VALUE OVER THE RESAMPLING UNIT (2026-11-17),
+        # so the x axis is that unit. It carries no parenthesised unit, because a
+        # ligand name is a category and not a quantity; the measured column, with its
+        # unit, is on y. Before this the figure plotted the column against itself and
+        # every point sat on the diagonal.
+        assert look["xlabel"] == "ligand" and look["ylabel"].endswith("(kcal/mol)")
+    else:
+        assert look["xlabel"] == "d.a (kcal/mol)" and look["ylabel"].endswith("(kcal/mol)")
 
 
 @pytest.mark.parametrize("plant", ["caption beneath the axes", "suptitle", "title", "text in the axes", "annotation"])
@@ -208,19 +216,38 @@ def test_a_line_is_drawn_exactly_where_the_commentary_says_one_is():
     for case, (claim, pairs, clusters) in CASES.items():
         look = _look(claim, pairs, clusters)
         identity = figures.identity_drawn(claim, pairs)
+        # A value figure's lines are the claim's own numbers, one per bound and one for
+        # the estimate, each named in the commentary. An undefined mark is decoration,
+        # so the count on the canvas and the names in the text are checked together.
+        spread = figures.value_scatter(claim, pairs)
         note = figures.marks(claim, FILES, len(pairs), clusters, identity)
-        assert look["n_reference_lines"] == (1 if identity else 0), case
+        expect = 1 if identity else (len(figures.value_lines(claim)) if spread else 0)
+        assert look["n_reference_lines"] == expect, case
         if pairs:
             assert ("The straight line is y = x" in note) is identity, case
-            assert ("No reference line is drawn." in note) is (not identity), case
+            assert ("No reference line is drawn." in note) is (not identity and not spread), case
+            for value, name in (figures.value_lines(claim) if spread else []):
+                assert f"{name} at {value:g}" in note, (case, name)
         else:
             assert "No points could be drawn" in note and "y = x" not in note, case
 
 
 def test_a_value_claim_gets_no_y_equals_x_line_through_points_that_all_lie_on_it():
-    """`kind = "value"` declares x = y, one column against itself: the line would pass through every point and say nothing."""
+    """`kind = "value"` declares x = y, so a diagonal would pass through every point and say nothing.
+
+    Since 2026-11-17 the points are spread over the resampling unit instead, and the lines the figure
+    does carry are HORIZONTAL: the claim's own bounds and its estimate. So the test is no longer "no
+    lines" but "no diagonal", and it is checked by reading the y data of every line drawn."""
+    import matplotlib.pyplot as plt
+
     claim, pairs, clusters = CASES["value claim"]
-    assert not figures.identity_drawn(claim, pairs) and _look(claim, pairs, clusters)["n_reference_lines"] == 0
+    assert not figures.identity_drawn(claim, pairs)
+    fig = _drawn(claim, pairs, clusters)
+    drawn = [ln for ln in fig.axes[0].lines if ln.get_linestyle() not in ("None", "none", "")]
+    assert len(drawn) == len(figures.value_lines(claim))
+    for ln in drawn:
+        assert len(set(ln.get_ydata())) == 1, "a line on a value figure must be horizontal"
+    plt.close(fig)
     assert figures.identity_drawn(_claim(), pairs), "two columns in one unit still get the line, so the test above means something"
 
 

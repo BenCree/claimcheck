@@ -198,6 +198,150 @@ def roc_auc(xs: list[float], ys: list[float]) -> float | None:
     return u / (n_pos * n_neg)
 
 
+def mid_ranks(vs: list[float]) -> list[float]:
+    """Average ranks, 1-based, ties sharing the mean of the positions they span.
+
+    The same rule `roc_auc` and `spearman` each apply inside themselves, written once here for the code that needs the
+    ranks THEMSELVES rather than a statistic computed from them (`paired_swap_p`). Neither of those two is rewritten to
+    call it: their arithmetic would be identical, and nothing is gained by moving the one line that 6,889 adjudicated
+    rows were computed through.
+
+    AUC IS INVARIANT UNDER THIS MAP, exactly and not approximately: the ranks are a monotone relabelling that preserves
+    the tie structure, so ranking them again returns them unchanged. That is what lets `paired_swap_p` put two score
+    columns of different scales on one comparable scale without changing the statistic it is testing.
+    """
+    order = sorted(range(len(vs)), key=lambda i: vs[i])
+    out = [0.0] * len(vs)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and vs[order[j + 1]] == vs[order[i]]:
+            j += 1
+        avg = (i + j) / 2 + 1
+        for k in range(i, j + 1):
+            out[order[k]] = avg
+        i = j + 1
+    return out
+
+
+def roc_auc_difference(xs: list[float], ys: list[tuple[float, float]]) -> float | None:
+    """AUC(score) - AUC(baseline) against one binary label, both computed ON IDENTICAL ROWS.
+
+    ADDED 2026-11-20 (proposal P36). Two AUROCs adjudicated separately come back with two intervals, and two
+    overlapping intervals do not say that their difference contains zero: most of each interval's width is the cohort
+    variance the two share, and a difference claim is the only way to cancel it. Measured on
+    `/home/ben/code/projects/targets/cry1/experiments/litpcba_flexdock`, where the CNN affinity reads 0.7323
+    [0.6653, 0.7930] and heavy-atom count 0.6573 [0.5877, 0.7230] on the same 5,047 compounds: the intervals overlap
+    almost entirely and nothing in the corpus could say whether the scores differ.
+
+    `xs` IS THE LABEL, read as an indicator at >= 0.5. `ys` IS ONE PAIR PER ROW, `(score, baseline)`, packed by
+    `_paired` so that the shared machinery carries both columns through a resample without ever seeing them apart:
+    `bootstrap_ci` and `permutation_p` only index `p[0]` and `p[1]` and never do arithmetic on either, so A RESAMPLE
+    DRAWS A ROW WITH BOTH OF ITS SCORES and the pairing cannot be lost. Resampling the two columns independently would
+    throw away the correlation between them, which is the entire gain.
+
+    HIGHER MEANS MORE LIKELY POSITIVE IN BOTH COLUMNS, as for `roc_auc`, and the rule that writes the table owns that
+    convention. The sign of the result is the method's: POSITIVE MEANS `score` SEPARATES THE LABELS BETTER THAN
+    `baseline` DOES. It spans [-1, 1] and is exactly 0.0 when the two columns are the same column, which is this
+    estimator's known answer.
+
+    Returns None when either AUC is undefined (either class empty, ragged input), so the claim comes back
+    `unverifiable` rather than 0.0: a join that dropped every active must not read as "the two scores are equal".
+    """
+    if not xs or len(xs) != len(ys):
+        return None
+    try:
+        a = [float(v[0]) for v in ys]
+        b = [float(v[1]) for v in ys]
+    except (TypeError, IndexError, ValueError):
+        return None                    # not packed: a two-column claim's pairs reaching a three-column estimator
+    ua, ub = roc_auc(xs, a), roc_auc(xs, b)
+    if ua is None or ub is None:
+        return None
+    return ua - ub
+
+
+def paired_swap_p(pairs: list[tuple[float, tuple[float, float]]], clusters: list[str] | None,
+                  n_perm: int = N_BOOT, estimate=None) -> tuple[float, float] | None:
+    """Two-sided p for a paired difference of two screening statistics, by SWAPPING THE TWO SCORE COLUMNS WITHIN A WHOLE UNIT.
+
+    Returns `(p, floor)` as `permutation_p` does, `floor` being `1 / (n_perm + 1)`.
+
+    WHY NOT `permutation_p`. That one permutes the y values of whole clusters against x, which here moves both score
+    columns together and so tests whether EITHER column reads the label. That is not this claim's question. A claim
+    that one score beats another needs a null under which the two are interchangeable, and its p must be large when
+    both columns are strongly informative and equally so, which the label permutation's is not: it would report a
+    decisive p for two excellent and identical scorers.
+
+    SO THE NULL IS EXCHANGEABILITY OF THE TWO COLUMNS, drawn by giving each resampling unit an independent fair coin
+    and swapping that unit's two score values when it comes up heads. The unit is the independent draw, so the whole
+    unit swaps or none of it does. Both columns are put on mid-ranks over the whole table first (`mid_ranks`), because
+    a swap mixes values from the two columns into one column and AUC then ranks them together: CNN affinity in [1, 8]
+    and heavy-atom count in [10, 60] would otherwise be compared as magnitudes. AUC is invariant under that rank map,
+    so the observed statistic is unchanged by it and only the null is affected.
+
+    WHAT IT ASSUMES, AND WHERE THAT IS APPROXIMATE. Exchangeability needs the two columns to be interchangeable under
+    the null, and two real score columns rarely share a tie structure: heavy-atom count takes a few dozen distinct
+    values over thousands of compounds while a CNN affinity is almost tie-free, so a swap moves a tied block into
+    positions the other column resolved. The null distribution is therefore approximate, in a direction that is not
+    established here. It is reported for that reason and NO VERDICT DEPENDS ON IT: the verdict is the claimed value
+    against the paired bootstrap interval, as everywhere else in this package.
+
+    The null distribution is symmetric about 0 by construction, since swapping every unit of a draw gives exactly the
+    negated statistic, so the two-sided comparison about a centre of 0 is the right one (`as_extreme`).
+
+    `estimate` IS THE PAIRED STATISTIC, defaulting to `roc_auc_difference` (2026-11-22, when `bedroc_difference` became
+    the second one; before that it was written into the body). It must be antisymmetric in the two columns and invariant
+    under `mid_ranks`, which both members of `PAIRED_DIFFERENCE_METHODS` are: BEDROC reads only the order of the scores
+    and which of them are tied, as AUROC does, so the monotone tie-preserving rank map leaves both unchanged. A
+    statistic without those two properties would get a null that is neither centred nor comparable with the observed
+    value, and nothing here could detect it. The draw order of the RNG is untouched by the argument, so every p already
+    adjudicated under the AUROC form is byte-identical.
+
+    FOR A BEDROC DIFFERENCE the approximation named above bites in a particular place, worth stating because it is where
+    the statistic looks: a swap mixes the two columns' values into one column, and a column with a coarse tie structure
+    (heavy-atom count over thousands of compounds) contributes blocks that the other column resolved. BEDROC puts 0.798
+    of its weight in the first 8% of the list at alpha = 20, so what the mismatch perturbs is exactly the part of the
+    list the statistic is made of. The p is reported for that reason and no verdict depends on it.
+    """
+    if estimate is None:
+        estimate = roc_auc_difference
+    xs = [p[0] for p in pairs]
+    try:
+        a = mid_ranks([float(p[1][0]) for p in pairs])
+        b = mid_ranks([float(p[1][1]) for p in pairs])
+    except (TypeError, IndexError, ValueError):
+        return None
+    obs = estimate(xs, list(zip(a, b, strict=True)))
+    if obs is None:
+        return None
+    if clusters is None:
+        idx_by: dict[str, list[int]] = {str(i): [i] for i in range(len(pairs))}
+    else:
+        idx_by = {}
+        for i, c in enumerate(clusters):
+            idx_by.setdefault(c, []).append(i)
+    if len(idx_by) < 3:
+        return None
+    rng = random.Random(SEED + 2)
+    hits = done = 0
+    for _ in range(n_perm):
+        first, second = list(a), list(b)
+        for rows in idx_by.values():
+            if rng.random() < 0.5:
+                for i in rows:
+                    first[i], second[i] = b[i], a[i]
+        d = estimate(xs, list(zip(first, second, strict=True)))
+        if d is None:
+            continue
+        done += 1
+        if as_extreme(d, obs, 0.0):
+            hits += 1
+    if done < n_perm // 2:
+        return None
+    return ((hits + 1) / (done + 1), 1.0 / (done + 1))
+
+
 @functools.lru_cache(maxsize=64)
 def _bedroc_weights(n_total: int, alpha: float) -> tuple[float, ...]:
     """exp(-alpha * k / N) for list position k = 1..N, position 1 being the best-scored compound."""
@@ -295,6 +439,77 @@ def _bedroc_needs_alpha(xs: list[float], ys: list[float]) -> float | None:
     """The registered `bedroc` entry. BEDROC has no value until alpha is declared, so called bare this returns None; `check` replaces
     it with `bedroc_alpha(alpha)` or refuses the claim."""
     return None
+
+
+def bedroc_difference(xs: list[float], ys: list[tuple[float, float]], alpha: float) -> float | None:
+    """BEDROC(score) - BEDROC(baseline) AT ONE DECLARED ALPHA, both computed against one binary label ON IDENTICAL ROWS.
+
+    ADDED 2026-11-22. `roc_auc_difference` (2026-11-20) answered the same question for AUROC and left the metric
+    `litpcba_flexdock` DECLARES AS PRIMARY unanswered: at a 2% active rate an AUROC is dominated by the ordering of the
+    inactives among themselves, which nobody acts on, so that experiment's gate was decided on a statistic it does not
+    rank by (`context.pending.toml`, D2, pending from 2026-11-18). BEDROC weights the top of the list, which is where a
+    screen is used, so the two can disagree and THE DISAGREEMENT IS THE FINDING.
+
+    `xs` IS THE LABEL, read as an indicator at >= 0.5. `ys` IS ONE PAIR PER ROW, `(score, baseline)`, packed by
+    `_paired`, so `bootstrap_ci` and `paired_swap_p` carry both columns through a resample without ever seeing them
+    apart. HIGHER MEANS MORE LIKELY POSITIVE IN BOTH COLUMNS, as for `bedroc` and `roc_auc`, and the rule that writes
+    the table owns that convention. POSITIVE MEANS `score` PUTS THE ACTIVES HIGHER UP THE LIST THAN `baseline` DOES.
+
+    ALPHA IS APPLIED IDENTICALLY TO BOTH COLUMNS and has no default, as for `bedroc`: it decides what "early" means
+    (0.798 of the weight in the first 8% of the list at alpha = 20), two alphas are two different claims, and an alpha
+    applied to one column and not the other would be a difference between two different questions.
+
+    WHY THE NULL IS STILL ZERO THOUGH NEITHER TERM IS CENTRED ON A CONSTANT. A BEDROC is read against
+    `bedroc_random_expectation`, which is 0.0604 at 7 actives of 357 and not 0.5 or 0. That expectation depends only on
+    the number of positives, the number of rows and alpha, and the two columns here are scored on the SAME ROWS, so they
+    share it exactly, along with S_min and S_max. The difference is (S_score - S_baseline) / (S_max - S_min): the
+    normalising constants cancel in the estimate, in every bootstrap draw and in every swap draw. So zero means "the two
+    columns gather the same weight of actives at the top", which is the hypothesis, and the random expectation never
+    enters the difference. It is on the verdict row all the same, because the two BEDROCs beside it are read against it.
+
+    It spans [-1, 1]: both ends are reachable, a perfect ranking against its own inversion being exactly +1.0 at any
+    active fraction (BEDROC does not saturate). A column against a copy of itself is exactly 0.0, which is this
+    estimator's known answer, and the zero-width bootstrap interval it comes with is the only cheap proof that the
+    pairing in the table is what the claim thinks it is.
+
+    None when either BEDROC is undefined (either class empty, alpha absent or not a positive finite number, ragged or
+    unpacked input), so the claim reads `unverifiable` rather than 0.0: a join that dropped every active must not come
+    back as "the two scores are equal".
+    """
+    if not xs or len(xs) != len(ys):
+        return None
+    try:
+        a = [float(v[0]) for v in ys]
+        b = [float(v[1]) for v in ys]
+    except (TypeError, IndexError, ValueError):
+        return None                    # not packed: a two-column claim's pairs reaching a three-column estimator
+    ba, bb = bedroc(xs, a, alpha), bedroc(xs, b, alpha)
+    if ba is None or bb is None:
+        return None
+    return ba - bb
+
+
+def bedroc_difference_alpha(alpha: float):
+    """`bedroc_difference` at a declared alpha, as the two-argument estimator the paired bootstrap and the swap null call.
+    ONE alpha for both columns, bound once here, so no code path downstream can give the two columns different weights."""
+    def estimate(xs: list[float], ys: list[tuple[float, float]]) -> float | None:
+        return bedroc_difference(xs, ys, alpha)
+    return estimate
+
+
+def _bedroc_difference_needs_alpha(xs: list[float], ys: list[tuple[float, float]]) -> float | None:
+    """The registered `bedroc_difference` entry, None until `check` binds alpha, exactly as `_bedroc_needs_alpha` is."""
+    return None
+
+
+#: THE METHODS THAT READ A THIRD COLUMN, declared as `baseline = "<dataset>.<column>"` and packed inside the pair by
+#: `_paired`. Written once as a set because the alternative, a method name repeated at every site that asks "is this a
+#: paired difference", is how the second such method gets added to four places out of six (2026-11-22, with
+#: `bedroc_difference`; `roc_auc_difference` was the only member from 2026-11-20).
+PAIRED_DIFFERENCE_METHODS = frozenset({"roc_auc_difference", "bedroc_difference"})
+
+#: The methods taking the required claim key `alpha`, which has no default (see `bedroc`).
+ALPHA_METHODS = frozenset({"bedroc", "bedroc_difference"})
 
 
 def kendall(xs: list[float], ys: list[float]) -> float | None:
@@ -1185,6 +1400,21 @@ ESTIMATORS: dict[str, tuple] = {
     # the entry here returns None until `check` binds it. Its permutation p is centred on the random-ranking expectation at the
     # table's active fraction, which is not 0. No R squared. Bounded 0 to 1 at any active fraction: it does not saturate.
     "bedroc": (_bedroc_needs_alpha, "correlation"),
+    # ROC AUC DIFFERENCE (2026-11-20, proposal P36): "this score separates the actives BETTER THAN that one does", the
+    # paired difference of two AUROCs on identical rows. ONE OF THE TWO THREE-COLUMN METHODS (`PAIRED_DIFFERENCE_METHODS`;
+    # it was the only one until `bedroc_difference` on 2026-11-22): `x` the label, `y` the score and
+    # `baseline = "<dataset>.<column>"` the column it is compared against, which `_paired` packs into `y` as a pair so a
+    # resample draws a row with BOTH of its scores and the pairing survives (see `roc_auc_difference`). Positive means `y`
+    # beats `baseline`. Interval: the same paired bootstrap over the resampling unit. Its p is NOT the label permutation
+    # but `paired_swap_p`, whose null is that the two columns are interchangeable. No R squared.
+    "roc_auc_difference": (roc_auc_difference, "correlation"),
+    # BEDROC DIFFERENCE (2026-11-22): the same paired construction on the metric a screen is actually used by, "this score puts the
+    # actives HIGHER UP THE LIST than that one does". `x` the label, `y` the score, `baseline` the column it is compared against, and
+    # `alpha` REQUIRED and applied identically to both columns (the entry here returns None until `check` binds it, as bedroc's does).
+    # Interval: the same paired bootstrap over the resampling unit. p: `paired_swap_p` with this statistic. Span [-1, 1], known answer
+    # exactly 0.0 on a column against a copy of itself. The random expectation each BEDROC is read against is shared by both columns on
+    # identical rows and cancels in the difference, so the null is 0 (see `bedroc_difference`). No R squared.
+    "bedroc_difference": (_bedroc_difference_needs_alpha, "correlation"),
     # VALUE CLAIMS (2026-10-01). Every prediction is adjudicated here, not in an
     # analysis script, including the ones that are not correlations: an sd, a
     # variance share, a mean error, a count that passes a rule. They take the
@@ -1397,34 +1627,104 @@ def _ref(text: str, only: str | None) -> tuple[str, str]:
     return only, text
 
 
-def _paired(rows: list[dict], x: str, y: str, unit: str | None):
+def _usable(v) -> float | None:
+    """`v` as a finite float, or None where it is missing, unreadable or non-finite (which is not missing and not a value)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if f != f or abs(f) == float("inf") else f
+
+
+def _paired(rows: list[dict], x: str, y: str, unit: str | None, second: str | None = None):
     """Rows usable for BOTH columns, kept together, with the cluster label.
 
     Paired deliberately: filtering each column separately would compare
     `x[i]` against `y[j]`, which is a correlation between two different
     subsets and is not a number about anything.
+
+    `second` (2026-11-20, `roc_auc_difference`) names a THIRD column, and then a row is kept only when all three of its
+    values are usable and the pair comes back as `(x, (y, second))`. The second value travels INSIDE the pair because
+    everything downstream resamples pairs and never looks inside them, so a drawn row carries both of its scores and the
+    pairing a paired difference exists to exploit cannot be broken by the bootstrap. A row missing the third column is
+    dropped from the claim entirely rather than from one column of it, for the reason the two-column form is paired.
     """
     pairs, clusters, dropped = [], [], 0
     for r in rows:
-        try:
-            a, b = float(r[x]), float(r[y])
-        except (ValueError, KeyError):
+        if x not in r or y not in r or (second is not None and second not in r):
             dropped += 1
             continue
-        if a != a or b != b or abs(a) == float("inf") or abs(b) == float("inf"):
-            dropped += 1               # non-finite is not missing and not a value
+        a, b = _usable(r[x]), _usable(r[y])
+        c = _usable(r[second]) if second is not None else 0.0
+        if a is None or b is None or c is None:
+            dropped += 1
             continue
-        pairs.append((a, b))
+        pairs.append((a, b) if second is None else (a, (b, c)))
         if unit:
             clusters.append(str(r.get(unit, "")))
     return pairs, (clusters if unit else None), dropped
 
 
-def _range_verdict(rng, lo: float, hi: float, where: str, verdict) -> dict:
+def _hidden_gap(gap: float, bigger: str, smaller: str) -> float | None:
+    """How far a refutation really is, WHEN THE LINE THAT REPORTS IT NO LONGER SHOWS IT.
+
+    A verdict is decided on unrounded numbers and reported in rounded ones, and on 2026-11-17 six
+    known-answer claims were read as a defect in this checker because of the difference: all six say
+    "claimed 1.0 lies OUTSIDE the 95% CI [1.000, 1.000]", which is not a sentence anybody can act on.
+    MEASURED, by re-running one of them on its own data in a copy:
+    `A1_6kx4_aposcore_is_deterministic_KNOWN_ANSWER` scores the same poses twice, the two columns
+    differ in the seventh decimal (20.82521521591532 against 20.825217903571236 in row 1), and over
+    34,447 compounds rho falls short of 1 by 2.91e-11, which is 29 times KNOWN_ANSWER_TOL and far
+    less than the printed three decimals. The refutation is real and the comparison is right about
+    it; the line hiding its own margin is what was wrong. Two of the six carry the same finding in
+    their own evidence note, with the mechanism and the repair (a `claimed_range`) worked out:
+    `funnel_rerank_and_top1k/context.toml`, KA1b, 2026-11-16.
+
+    `gap` is the distance outside at full precision. `bigger` and `smaller` are the two numbers as
+    the `why` line prints them, in the order that ought to show the separation. Returns the gap when
+    the printed pair no longer does, else None: the margin is spelled out exactly where the rounding
+    would otherwise have swallowed it, and every other refutation reads as it always has.
+    """
+    if not (gap > 0) or not math.isfinite(gap):
+        return None
+    try:
+        if float(bigger) > float(smaller):
+            return None                 # the printed line already shows it
+    except ValueError:
+        return None
+    return gap
+
+
+def _margin_text(gap: float, claimed: float, estimate: float | None = None) -> str:
+    """The sentence that says how far outside, and, for a correlation claimed at +-1, how that compares with the
+    allowance a known answer gets.
+
+    THE TWO DISTANCES ARE DIFFERENT NUMBERS and only one of them decides anything. `gap` is from the claimed value
+    to the nearer interval bound; the known-answer rescue above tests |claimed - r|, the distance to the ESTIMATE,
+    which is always the larger of the two. Comparing the gap with KNOWN_ANSWER_TOL could print "inside that" on a
+    row the rescue had already declined, which is a sentence contradicting its own verdict. So the comparison is
+    made on the estimate, and only where there is one: `estimate` is None at the value site, where no such
+    allowance exists at all and the claim may be reading one column rather than two.
+    """
+    text = (f" The printed numbers are rounded and this refutation is real: the claimed value is "
+            f"{gap:.3g} outside the nearer bound at full precision.")
+    if estimate is not None and abs(claimed) == 1.0:
+        off = abs(claimed - estimate)
+        text += (f" A known answer of {claimed:g} is allowed {KNOWN_ANSWER_TOL:.0e} for the agreement of two "
+                 f"independent computations at numerical precision, measured against the estimate; "
+                 f"|{claimed:g} - r| = {off:.3g}, which is {off / KNOWN_ANSWER_TOL:.3g} times that allowance.")
+    return text
+
+
+def _range_verdict(rng, lo: float, hi: float, where: str, verdict,
+                   printed: tuple[str, str] | None = None) -> dict:
     """A `claimed_range = [lo, hi]` (-inf or inf for an open side), for a value claim and a correlation alike, judged by where the
     whole interval lies: inside the range, agrees; entirely outside, refuted; across a bound, unverifiable, because this design cannot
     tell on which side the value is. No width limit is applied: an interval wide enough not to discriminate already straddles a bound
-    of any range narrow enough to say something."""
+    of any range narrow enough to say something.
+
+    `printed` is the interval's two bounds as the caller's `where` prints them, so that a refutation
+    whose margin the rounding swallows says how far outside it really is (see `_hidden_gap`)."""
     # An open side is written as TOML's -inf or inf (TOML has no null); NaN is refused rather than read as "no bound", because every
     # comparison with it is false and the claim would come back unverifiable for a reason nobody wrote.
     if not isinstance(rng, list) or len(rng) != 2 or any(isinstance(x, float) and math.isnan(x) for x in rng):
@@ -1434,7 +1734,14 @@ def _range_verdict(rng, lo: float, hi: float, where: str, verdict) -> dict:
     if a <= lo and hi <= b:
         return verdict(AGREES, f"{where} lies within the claimed range {text}")
     if hi < a or lo > b:
-        return verdict(REFUTED, f"{where} lies OUTSIDE the claimed range {text}")
+        # Which end is outside decides which pair of printed numbers ought to show the separation.
+        gap, bigger, smaller = ((a - hi, f"{a:g}", (printed or ("", ""))[1]) if hi < a
+                                else (lo - b, (printed or ("", ""))[0], f"{b:g}"))
+        hidden = _hidden_gap(gap, bigger, smaller) if printed else None
+        tail = ("" if hidden is None else
+                f" The printed numbers are rounded and this refutation is real: the interval lies "
+                f"{hidden:.3g} outside the nearer bound of the range at full precision.")
+        return verdict(REFUTED, f"{where} lies OUTSIDE the claimed range {text}{tail}")
     return verdict(UNVERIFIABLE, f"{where} straddles a bound of the claimed range {text}; the data cannot tell which side the value is on")
 
 
@@ -1479,13 +1786,19 @@ def _value_verdict(rel: dict, row: dict, v: float, lo: float, hi: float, n_eff: 
                  f"actives treated as independent trials (conservative when they compete for places), nothing resampled")
     else:
         where = f"the 95% CI [{lo:.4g}, {hi:.4g}] for {rel['method']} = {v:.4g}{count}, resampling {n_eff} {unit or 'row'}(s)"
+    shown = (f"{lo:.4g}", f"{hi:.4g}")          # the bounds as every branch of `where` above prints them
     if rel.get("claimed_range") is not None:
-        return _range_verdict(rel["claimed_range"], lo, hi, where, verdict)
+        return _range_verdict(rel["claimed_range"], lo, hi, where, verdict, printed=shown)
     claimed = rel.get("claimed")
     if claimed is None:
         return verdict(UNVERIFIABLE, "a value claim states neither `claimed` nor `claimed_range`")
     if not (lo <= claimed <= hi):
-        return verdict(REFUTED, f"claimed {claimed} lies OUTSIDE {where}")
+        # A REFUTATION THAT SAYS HOW FAR OUTSIDE, when the rounding in `where` has swallowed it.
+        gap, bigger, smaller = ((claimed - hi, f"{claimed:g}", shown[1]) if claimed > hi
+                                else (lo - claimed, shown[0], f"{claimed:g}"))
+        hidden = _hidden_gap(gap, bigger, smaller)
+        tail = "" if hidden is None else _margin_text(hidden, float(claimed))
+        return verdict(REFUTED, f"claimed {claimed} lies OUTSIDE {where}{tail}")
     limit = rel.get("max_ci_width")
     if limit is not None and hi - lo > limit:
         return verdict(UNVERIFIABLE, f"claimed {claimed} lies within {where}, but the interval is wider than the claim's max_ci_width {limit}")
@@ -1549,12 +1862,24 @@ def check(root: Path | str) -> dict:
             # and a number cannot show the SHAPE that produced it: a wedge, a
             # cluster of ties, one point carrying the whole correlation, a
             # scatter the line does not describe. Every one of those has been
-            # found here only by drawing it. So the declaration names the
-            # figure, `relate` records whether the file is actually on disk,
-            # and `--require-figures` exits non-zero when one is missing.
+            # found here only by drawing it. So a claim MAY name its own figure,
+            # `relate` records whether that declared file is on disk, and
+            # `--require-figures` exits non-zero when one is missing.
+            #
+            # THE NAME IS `declared_figure_exists` AND NOT `figure_exists`
+            # (2026-11-18). It tests the path the claim declared, and a claim
+            # that declares nothing reads false however many figures exist for
+            # it. Under the old name the master ledger reported 21,049 of 25,760
+            # claims as having no figure while 20,128 claim PNGs sat on disk,
+            # because the shared `check_claims` rule draws
+            # figures/claims/<id>.png for every claim and almost nobody also
+            # declares one. `relate` cannot report the drawn figure: it runs
+            # before `claimcheck.figures` in that rule, so it would read the
+            # previous pass's file or nothing. That question is answered from
+            # `figures/claims/index.json` and the PNGs beside it.
             "figure": str(rel.get("figure", "") or ""),
-            "figure_exists": bool(rel.get("figure")
-                                  and (root / str(rel["figure"])).is_file()),
+            "declared_figure_exists": bool(rel.get("figure")
+                                           and (root / str(rel["figure"])).is_file()),
             "x": f"{xd}.{x}", "y": f"{yd}.{y}",
             "x_dataset": xd, "y_dataset": yd,
             "cross_dataset": xd != yd,
@@ -1606,18 +1931,51 @@ def check(root: Path | str) -> dict:
 
         # `alpha` (bedroc only, REQUIRED there): the early-recognition weight. No default, because the number means nothing without it
         # and a default would hide the choice. It is recorded on the row. On any other method the key is left alone, as before.
-        if rel["method"] == "bedroc":
+        if rel["method"] in ALPHA_METHODS:
             alpha = rel.get("alpha")
             if (isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not math.isfinite(alpha) or alpha <= 0):
                 out.append(verdict(
                     UNVERIFIABLE,
-                    ("bedroc needs `alpha = <positive number>` and none is declared" if alpha is None else
-                     f"alpha = {alpha!r} is not accepted: bedroc needs a positive finite number")
+                    (f"{rel['method']} needs `alpha = <positive number>` and none is declared" if alpha is None else
+                     f"alpha = {alpha!r} is not accepted: {rel['method']} needs a positive finite number")
                     + ". There is no default: alpha decides what share of the weight the top of the list carries "
-                      "(0.798 in the first 8% at alpha = 20), so the claim states it"))
+                      "(0.798 in the first 8% at alpha = 20), so the claim states it"
+                    + (". It is applied identically to both score columns, so one alpha governs the difference"
+                       if rel["method"] == "bedroc_difference" else "")))
                 continue
-            estimate = bedroc_alpha(float(alpha))
+            # ONE alpha, bound once, for both columns of a difference: nothing downstream can weight the two differently.
+            estimate = (bedroc_difference_alpha if rel["method"] == "bedroc_difference" else bedroc_alpha)(float(alpha))
             row["alpha"] = float(alpha)
+
+        # `baseline` (the PAIRED_DIFFERENCE_METHODS only, REQUIRED there): the column `y` is compared against. Refused on any other method
+        # for the reason `tie_tol` is: a key a method does not read is a declaration the checker silently ignored, and the next
+        # person reads it as having had an effect.
+        second = None
+        if rel["method"] in PAIRED_DIFFERENCE_METHODS:
+            base_ref = rel.get("baseline")
+            if not isinstance(base_ref, str) or not base_ref:
+                out.append(verdict(UNVERIFIABLE, f"{rel['method']} needs `baseline = \"<dataset>.<column>\"`, the score column `y` is "
+                                                 f"compared against; none is declared. It is the whole claim: without it there is one "
+                                                 f"{'BEDROC' if rel['method'] == 'bedroc_difference' else 'AUROC'} and nothing to subtract"))
+                continue
+            bd, second = _ref(base_ref, only)
+            if bd != yd:
+                out.append(verdict(UNVERIFIABLE, f"baseline {base_ref!r} is in dataset {bd!r} and `y` is in {yd!r}. The two scores must be "
+                                                 f"columns of ONE table, written there by the rule that computed them: a paired difference is "
+                                                 f"a statement about identical rows, and `join` lines up two datasets, not three"))
+                continue
+            if x == y and xd == yd:
+                out.append(verdict(UNVERIFIABLE, f"x and y are both {rel['x']!r}: the label used as its own score is an oracle, so the "
+                                                 f"difference would be 1 minus the baseline's AUROC and not a comparison of two scores. "
+                                                 f"Declare the oracle as its own column and name it in `y`"))
+                continue
+            row["baseline"] = f"{bd}.{second}"
+            row["baseline_unit"] = declared.get((bd, second), {}).get("unit")
+        elif rel.get("baseline") is not None:
+            out.append(verdict(UNVERIFIABLE, f"`baseline` applies to the paired-difference methods "
+                                             f"{', '.join(sorted(PAIRED_DIFFERENCE_METHODS))} only (this claim's method is "
+                                             f"{rel['method']!r}), and a key no method reads must not look as though it had an effect"))
+            continue
 
         # POOLED METHODS name the unit within which replicates sit with `group`, and it is the unit the bootstrap resamples: a group is one
         # independent draw, its rows are not. A resampling unit that differs from it is refused, naming both, because resampling the rows of
@@ -1685,12 +2043,14 @@ def check(root: Path | str) -> dict:
                 continue
             rows = [{**r_, **l_} for l_, r_ in pairs_rows]
 
-        absent = [c for c in (x, y) if not rows or c not in rows[0]]
+        # The baseline column is checked here with the other two, not beside it: a third column present in the declaration and
+        # absent from the file is the same failure as a missing `y`, and it has to report itself as one.
+        absent = [c for c in (x, y) + ((second,) if second else ()) if not rows or c not in rows[0]]
         if absent:
             out.append(verdict(UNVERIFIABLE,
                                f"the data has no column {', '.join(absent)}"))
             continue
-        undeclared = [c for (d_, c) in ((xd, x), (yd, y))
+        undeclared = [c for (d_, c) in ((xd, x), (yd, y)) + (((yd, second),) if second else ())
                       if declared.get((d_, c), {}).get("unit") is None]
         if undeclared:
             out.append(verdict(
@@ -1870,7 +2230,10 @@ def check(root: Path | str) -> dict:
             row["p_value"] = sign_test_p(sign["n_success"], sign["n_units"])
             row["p_method"] = f"exact two-sided binomial against 0.5 over {sign['n_units']} {unit or 'row'}(s)"
         else:
-            pairs, clusters, dropped = _paired(rows, x, y, unit)
+            # `second` is None for every method but the paired differences, where it packs the baseline column into the pair
+            # (`_paired`). One code path on purpose: the empty-unit refusal below and the drop counting are the same facts
+            # about a three-column claim as about a two-column one, and a second copy of them is a second place to fix.
+            pairs, clusters, dropped = _paired(rows, x, y, unit, second=second)
             # A COLUMN THAT EXISTS AND IS EMPTY is not the same as a column with
             # few clusters, and the bootstrap cannot tell them apart -- both arrive
             # as "fewer than 3 independent units". The difference matters: one says
@@ -1885,8 +2248,35 @@ def check(root: Path | str) -> dict:
         r = estimate([p[0] for p in pairs], [p[1] for p in pairs])
         if r is None:
             out.append(verdict(UNVERIFIABLE,
-                               f"r is undefined on {len(pairs)} usable pair(s)"))
+                               f"r is undefined on {len(pairs)} usable pair(s)"
+                               + (f" (either every row is labelled the same way, or one of {y} and {second} is unreadable "
+                                  f"on every row that the other is readable on)" if second else "")))
             continue
+        if second:
+            # BOTH PARTS BESIDE THE DIFFERENCE. A difference of -0.08 is a different finding when it is 0.52 against 0.60
+            # than when it is 0.90 against 0.98, and the row is the only place a reader gets to see which.
+            labels_ = [p[0] for p in pairs]
+            n_pos_ = sum(1 for v in labels_ if v >= 0.5)
+            row["n_actives"] = n_pos_
+            if rel["method"] == "bedroc_difference":
+                # THE TWO BEDROCS, AND THE NUMBER THEY ARE EACH READ AGAINST. `random_expectation` is a property of the
+                # cohort and alpha, not of a column, so the two columns share it exactly on identical rows and it cancels
+                # in the difference; it is on the row because the two parts beside the difference are meaningless without
+                # it (0.10 against 0.06 is a screener barely above chance, 0.10 against 0.01 is one well above it).
+                row |= {"bedroc_y": bedroc(labels_, [p[1][0] for p in pairs], row["alpha"]),
+                        "bedroc_baseline": bedroc(labels_, [p[1][1] for p in pairs], row["alpha"]),
+                        "active_fraction": round(n_pos_ / len(pairs), 6),
+                        "alpha_times_active_fraction": round(row["alpha"] * n_pos_ / len(pairs), 6),
+                        "weight_share_top_8pct": round((1 - math.exp(-row["alpha"] * 0.08)) / (1 - math.exp(-row["alpha"])), 6)}
+                exp_ = bedroc_random_expectation(n_pos_, len(pairs), row["alpha"])
+                row |= {"random_expectation": None if exp_ is None else round(exp_, 6),
+                        "random_expectation_note": "the BEDROC a random ranking scores at this active fraction and alpha; SHARED BY BOTH "
+                                                   "COLUMNS, because it depends only on the rows and alpha, so it cancels in the difference "
+                                                   "and the null of the difference is 0. Each of bedroc_y and bedroc_baseline is read "
+                                                   "against it, never against 0"}
+            else:
+                row |= {"auc_y": roc_auc(labels_, [p[1][0] for p in pairs]),
+                        "auc_baseline": roc_auc(labels_, [p[1][1] for p in pairs])}
         row["estimate"] = round(r, 6)
         ci = bootstrap_ci(pairs, clusters, estimate=estimate)
         if ci is None:
@@ -1912,6 +2302,25 @@ def check(root: Path | str) -> dict:
             # of variance or of anything else, so it is left out rather than printed to be misread.
             row["r_squared"] = None
             row["r_squared_note"] = "not reported: AUC is a probability of correct ordering, not a correlation"
+        elif rel["method"] == "roc_auc_difference":
+            # Neither AUC has an R squared, so their difference has none either, and squaring a difference of two
+            # probabilities would produce a number with no reading at all.
+            row["r_squared"] = None
+            row["r_squared_note"] = ("not reported: this is a difference of two probabilities of correct ordering, and its "
+                                     "square is not a share of anything")
+            row["interval_source"] = (f"paired percentile bootstrap over {unit or 'row'}(s): each resample draws whole "
+                                      f"{unit or 'row'}(s) and recomputes BOTH AUROCs on the drawn rows, so the correlation "
+                                      f"between the two columns stays in and the cohort variance they share cancels")
+        elif rel["method"] == "bedroc_difference":
+            # Neither BEDROC has an R squared, so their difference has none, and a difference of two weighted
+            # early-recognition scores squared is not a share of anything.
+            row["r_squared"] = None
+            row["r_squared_note"] = ("not reported: this is a difference of two weighted early-recognition scores, and its square is "
+                                     "not a share of anything")
+            row["interval_source"] = (f"paired percentile bootstrap over {unit or 'row'}(s): each resample draws whole "
+                                      f"{unit or 'row'}(s) and recomputes BOTH BEDROCs at alpha = {row['alpha']:g} on the drawn rows, "
+                                      f"so the correlation between the two columns stays in and the cohort variance they share, "
+                                      f"S_min, S_max and the random expectation among it, cancels")
         elif rel["method"] == "bedroc":
             # The comparison point travels with the estimate: a random ranking does not score 0.
             n_pos = sum(1 for p in pairs if p[0] >= 0.5)
@@ -1932,7 +2341,11 @@ def check(root: Path | str) -> dict:
             null_centre = centre if centre is not None else 0.0        # the unrounded expectation, not the 6-place value on the row
         else:
             null_centre = 0.5 if rel["method"] == "roc_auc" else 0.0
-        pp = permutation_p(pairs, clusters, estimate=estimate, centre=null_centre)
+        # THE NULL OF A PAIRED DIFFERENCE IS NOT A LABEL PERMUTATION (see `paired_swap_p`): permuting the label against both
+        # score columns at once asks whether EITHER reads it, and would report a decisive p for two excellent scorers that are
+        # identical. The two columns are swapped within a whole unit instead.
+        pp = (paired_swap_p(pairs, clusters, estimate=estimate) if rel["method"] in PAIRED_DIFFERENCE_METHODS
+              else permutation_p(pairs, clusters, estimate=estimate, centre=null_centre))
         if pp is not None:
             p_val, p_floor = pp
             row |= {"p_value": round(p_val, 6), "p_floor": round(p_floor, 6),
@@ -1943,6 +2356,23 @@ def check(root: Path | str) -> dict:
                                 f"two-sided permutation of {n_eff} rows, "
                                 f"{N_BOOT} draws (NO resampling unit declared, "
                                 f"so this p assumes the rows are independent)"}
+            if rel["method"] == "roc_auc_difference":
+                row["p_method"] = (f"two-sided paired randomisation over {n_eff} {unit or 'row'}(s), {N_BOOT} draws: the two "
+                                   f"score columns are swapped within a whole {unit or 'row'} on a fair coin, both on mid-ranks "
+                                   f"over the table (AUROC is invariant under that map). THE NULL IS THAT THE TWO COLUMNS ARE "
+                                   f"INTERCHANGEABLE, not that either reads the label. Two columns rarely share a tie structure, "
+                                   f"so the exchangeability is approximate and the verdict does not depend on this p")
+            if rel["method"] == "bedroc_difference":
+                row["p_method"] = (f"two-sided paired randomisation over {n_eff} {unit or 'row'}(s), {N_BOOT} draws: the two score "
+                                   f"columns are swapped within a whole {unit or 'row'} on a fair coin, both on mid-ranks over the "
+                                   f"table (BEDROC reads only the order and the ties, so it is invariant under that map). THE NULL IS "
+                                   f"THAT THE TWO COLUMNS ARE INTERCHANGEABLE, not that either reads the label, and it is CENTRED ON 0 "
+                                   f"although neither BEDROC is centred on a constant: the random expectation "
+                                   f"{row.get('random_expectation')} is a property of these rows and alpha = {row['alpha']:g}, so both "
+                                   f"columns carry it and it cancels in every draw of the difference. Two columns rarely share a tie "
+                                   f"structure, and at alpha = {row['alpha']:g} the mismatch falls where "
+                                   f"{row['weight_share_top_8pct']:g} of the weight sits (the first 8% of the list), so the "
+                                   f"exchangeability is approximate and the verdict does not depend on this p")
             if rel["method"] == "bedroc":
                 # The null is skewed: its floor is only `random_expectation` below its centre, so a score worse than random cannot
                 # be far from the centre and this p detects enrichment only. An inverted score is a question for roc_auc.
@@ -1954,8 +2384,9 @@ def check(root: Path | str) -> dict:
             row["p_method"] = "permutation undefined on these pairs"
         where = (f"the 95% CI [{lo:.3f}, {hi:.3f}] for r = {r:.3f}, "
                  f"resampling {n_eff} {unit or 'row'}(s)")
+        shown = (f"{lo:.3f}", f"{hi:.3f}")      # the bounds as `where` prints them
         if rel.get("claimed_range") is not None:
-            out.append(_range_verdict(rel["claimed_range"], lo, hi, where, verdict))
+            out.append(_range_verdict(rel["claimed_range"], lo, hi, where, verdict, printed=shown))
             continue
         if rel.get("claimed") is None:
             out.append(verdict(UNVERIFIABLE, "a correlation claim states neither `claimed` nor `claimed_range`"))
@@ -1973,8 +2404,16 @@ def check(root: Path | str) -> dict:
         if not inside:
             # A refutation survives a wide interval: lying outside an interval
             # this generous is a stronger result, not a weaker one.
+            # IT ALSO SAYS HOW FAR OUTSIDE when the three printed decimals have
+            # swallowed the margin, which is what made six real refutations read
+            # as "claimed 1.0 lies OUTSIDE the 95% CI [1.000, 1.000]".
+            claimed = float(rel["claimed"])
+            gap, bigger, smaller = ((claimed - hi, f"{claimed:g}", shown[1]) if claimed > hi
+                                    else (lo - claimed, shown[0], f"{claimed:g}"))
+            hidden = _hidden_gap(gap, bigger, smaller)
+            tail = "" if hidden is None else _margin_text(hidden, claimed, estimate=r)
             out.append(verdict(REFUTED, f"claimed {rel['claimed']} lies "
-                                        f"OUTSIDE {where}"))
+                                        f"OUTSIDE {where}{tail}"))
         elif width > limit:
             out.append(verdict(
                 UNVERIFIABLE,
@@ -2024,6 +2463,10 @@ def check(root: Path | str) -> dict:
                 "refuted": sum(1 for res in sub if res["verdict"] == REFUTED),
                 "unverifiable": sum(1 for res in sub if res["verdict"] == UNVERIFIABLE),
             }
+    def _scrutinise(rows: list[dict]) -> list[dict]:
+        from claimcheck.scrutiny import scrutinise
+        return scrutinise(rows)
+
     unspecified = [res for res in out if not res.get("level")]
     if unspecified:
         levels["unspecified"] = {
@@ -2044,10 +2487,27 @@ def check(root: Path | str) -> dict:
                          for d, s_ in sets.items()},
             "joins": joins,
             "rows_read": sum(len(s_["rows"]) for s_ in sets.values()),
-            "claims_without_a_figure": [
+            # THE CLAIMS WHOSE DECLARED FIGURE IS NOT ON DISK, which is not the same
+            # question as which claims have no figure. Named `claims_without_a_figure`
+            # until 2026-11-18, when the master ledger reported 21,049 of 25,760 claims
+            # as unillustrated while 20,128 claim PNGs were on disk: almost no claim
+            # declares a figure, because `check_claims` draws one for each of them
+            # without being asked. `relate` cannot answer the drawn question honestly,
+            # since it runs BEFORE `claimcheck.figures` in that rule and would read the
+            # previous pass's file or nothing at all. `figures/claims/index.json` and
+            # the PNGs beside it are the record of what was drawn.
+            "claims_without_a_declared_figure": [
                 (r["id"] or f"{r['x']} ~ {r['y']}") for r in out
-                if not r.get("figure_exists")],
+                if not r.get("declared_figure_exists")],
             "relationships": out, "verdicts": verdicts, "levels": levels,
+            # SHAPES THAT MAKE A VERDICT UNTRUSTWORTHY, in their own key because they
+            # decide nothing: a claim that could not have failed, a control that came
+            # back refuted. See `claimcheck.scrutiny`, which also sweeps the prose for
+            # numbers contradicting these rows (that part needs the files, so it is on
+            # the command line and not here). Imported inside the function because
+            # `scrutiny` reads this module's verdict vocabulary and a module-level
+            # import either way round would be a cycle.
+            "warnings": _scrutinise(out),
             "any_refuted": any(res["verdict"] == REFUTED for res in out),
             # UNVERIFIABLE IS NOT A PASS, so it is reported at the top level
             # rather than left to be counted out of the rows.
@@ -2082,13 +2542,22 @@ def main(argv: list[str] | None = None) -> int:
         if bits:
             print(f"          {r['id'] or r['x'] + ' ~ ' + r['y']}: "
                   + ";  ".join(bits) + f"  [{r.get('p_method', '')}]")
-    missing = d.get("claims_without_a_figure", [])
+    missing = d.get("claims_without_a_declared_figure", [])
     if missing:
-        print(f"  {len(missing)} of {len(d['relationships'])} claim(s) name no "
+        print(f"  {len(missing)} of {len(d['relationships'])} claim(s) DECLARE no "
               f"figure on disk: " + ", ".join(missing[:8])
               + ("..." if len(missing) > 8 else ""))
-        print("  A verdict is a number and a number cannot show the shape that "
-              "made it. Add `figure = \"figures/x.png\"` to the relationship.")
+        print("  This counts declared figures only. The shared `check_claims` rule "
+              "draws figures/claims/<id>.png for every claim after this file is "
+              "written, and figures/claims/index.json is the record of those.")
+    for w in d.get("warnings", []):
+        # LOUD AND ABOVE THE SUMMARY, because a warning printed after the counts is
+        # a warning read after the conclusion. It changes no verdict and no exit status.
+        print(f"  WARNING {w['code']}: {w['claim']}")
+        print(f"      {w['why']}")
+    if d.get("warnings"):
+        print(f"  {len(d['warnings'])} warning(s) on the shape of these claims, none of which changes a "
+              f"verdict. `python -m claimcheck.scrutiny {root}` also reads the prose beside them.")
     print(f"  {d['verdicts']} over {d['rows_read']} row(s) -> {out}")
     print(f"  checker relate.py sha256 {d['relate_sha256']}, context.toml sha256 {d['context_sha256']}")
     if any(r.get("level") for r in d["relationships"]):

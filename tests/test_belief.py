@@ -837,6 +837,85 @@ def _project(d, name, claims, nodes=("a", "b")):
     return root
 
 
+def test_an_owner_in_another_tree_is_found_with_owner_root(tmp_path):
+    """THE REPAIR OF 2026-11-22. `defined_in` resolved against the reader's own
+    sibling directory and nowhere else, so an owner filed under a different
+    programme could not be found at all and the reader could not emit a graph.
+
+    Measured: five experiments delegate to `paros_objective`; the two filed
+    beside it resolved, and `paros_backtest`, `paros_rowanfep` and `paros_ifp`
+    failed with `BeliefError` inside their own `graph` rule. The owner is the
+    same statement in all five; only the directory layout differs.
+    """
+    _project(tmp_path / "programme_one", "owner",
+             [{"subject": "a", "predicate": "approximates", "object": "b",
+               "status": "assumed"}])
+    reader = _project(tmp_path / "programme_two", "reader",
+                      [{"subject": "a", "predicate": "approximates",
+                        "object": "b", "defined_in": "owner"}])
+
+    # The known-bad side: without the root it still fails, so the argument is
+    # what fixes it and not some incidental change of layout.
+    with pytest.raises(BeliefError, match="does not exist"):
+        BeliefGraph.from_project(reader)
+
+    g = BeliefGraph.from_project(
+        reader, owner_roots=(tmp_path / "programme_one",))
+    c, = g.claims
+    assert c.status == "assumed" and c.defined_in == "owner"
+
+
+def test_an_owner_found_in_two_roots_is_refused(tmp_path):
+    """Ambiguity is refused rather than resolved by argument order.
+
+    Two roots each offering `owner` would make "who decides this" depend on
+    which was passed first, which is the one property `defined_in` exists to
+    give. A reader must not have to know the command line to know that.
+    """
+    for programme in ("programme_one", "programme_two"):
+        _project(tmp_path / programme, "owner",
+                 [{"subject": "a", "predicate": "approximates", "object": "b",
+                   "status": "assumed"}])
+    reader = _project(tmp_path / "programme_three", "reader",
+                      [{"subject": "a", "predicate": "approximates",
+                        "object": "b", "defined_in": "owner"}])
+    with pytest.raises(BeliefError, match="different directories"):
+        BeliefGraph.from_project(
+            reader, owner_roots=(tmp_path / "programme_one",
+                                 tmp_path / "programme_two"))
+
+
+def test_one_owner_reached_twice_is_not_two_owners(tmp_path):
+    """A symlink to the same directory is the same owner, so resolved paths are
+    compared and not the paths as written. Without this the refusal above would
+    fire on the lab's own layout, where the flat `datasets/claimcheck/` tree is
+    symlinks to the directories under `projects/`."""
+    _project(tmp_path / "real", "owner",
+             [{"subject": "a", "predicate": "approximates", "object": "b",
+               "status": "assumed"}])
+    (tmp_path / "flat").mkdir()
+    try:
+        (tmp_path / "flat" / "owner").symlink_to(tmp_path / "real" / "owner")
+    except (OSError, NotImplementedError):
+        pytest.skip("no symlink support")
+    reader = _project(tmp_path / "elsewhere", "reader",
+                      [{"subject": "a", "predicate": "approximates",
+                        "object": "b", "defined_in": "owner"}])
+    g = BeliefGraph.from_project(
+        reader, owner_roots=(tmp_path / "real", tmp_path / "flat"))
+    assert g.claims[0].status == "assumed"
+
+
+def test_an_owner_found_nowhere_still_raises(tmp_path):
+    """An unresolvable owner must not become a silent absence: a claim whose
+    status nobody decided would read as a clean bill of health."""
+    reader = _project(tmp_path / "programme", "reader",
+                      [{"subject": "a", "predicate": "approximates",
+                        "object": "b", "defined_in": "owner"}])
+    with pytest.raises(BeliefError, match="does not exist"):
+        BeliefGraph.from_project(reader, owner_roots=(tmp_path / "empty",))
+
+
 def test_a_claim_is_read_from_the_project_that_owns_it(tmp_path):
     """The measured case: one statement — that an assay number stands in for
     the physical binding free energy — was `assumed` with no evidence in four

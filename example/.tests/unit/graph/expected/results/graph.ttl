@@ -6,21 +6,21 @@
 @prefix tl: <https://w3id.org/claimcheck/ns#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-<https://w3id.org/claimcheck/claim/3> a evi:Claim ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/3> a evi:Claim ;
     evi:supports <https://w3id.org/claimcheck/node/mace_e_int> ;
     tl:object <https://w3id.org/claimcheck/node/docked_pose> ;
     tl:predicate "depends_on" ;
     tl:status "by_construction" ;
     tl:subject <https://w3id.org/claimcheck/node/mace_e_int> .
 
-<https://w3id.org/claimcheck/claim/4> a evi:Claim ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/4> a evi:Claim ;
     evi:supports <https://w3id.org/claimcheck/node/docked_pose> ;
     tl:object <https://w3id.org/claimcheck/node/crystal_pose> ;
     tl:predicate "approximates" ;
     tl:status "assumed" ;
     tl:subject <https://w3id.org/claimcheck/node/docked_pose> .
 
-<https://w3id.org/claimcheck/claim/5> a evi:Claim ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/5> a evi:Claim ;
     evi:supports <https://w3id.org/claimcheck/node/mace_e_int>,
         <https://w3id.org/claimcheck/node/vina_score> ;
     tl:object <https://w3id.org/claimcheck/node/vina_score> ;
@@ -28,24 +28,19 @@
     tl:status "by_construction" ;
     tl:subject <https://w3id.org/claimcheck/node/mace_e_int> .
 
-<https://w3id.org/claimcheck/claim/6> a evi:Claim ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/6> a evi:Claim ;
     evi:supports <https://w3id.org/claimcheck/node/vina_score> ;
     tl:object <https://w3id.org/claimcheck/node/interaction_strength> ;
     tl:predicate "approximates" ;
     tl:status "assumed" ;
     tl:subject <https://w3id.org/claimcheck/node/vina_score> .
 
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/verdict/unnamed-1f82548f854f> a evi:Method ;
+    rdfs:label "recomputed pearson from the data" ;
+    evi:directlyChallenges <https://w3id.org/claimcheck/exp/mace_vs_affinity/relationship/unnamed-1f82548f854f> .
+
 <https://w3id.org/claimcheck/graph> a owl:Ontology ;
     owl:imports <https://w3id.org/EVI> .
-
-<https://w3id.org/claimcheck/project/mace_vs_affinity> a sc:Dataset ;
-    sc:distribution <https://w3id.org/claimcheck/file/experimental_affinity_csv>,
-        <https://w3id.org/claimcheck/file/mace_energies_csv> ;
-    sc:name "mace_vs_affinity" .
-
-<https://w3id.org/claimcheck/verdict/2> a evi:Method ;
-    rdfs:label "recomputed pearson from the data" ;
-    evi:directlyChallenges <https://w3id.org/claimcheck/relationship/2> .
 
 <https://w3id.org/claimcheck/artefact/affinity> a tl:Artefact ;
     sc:name "affinity" .
@@ -53,7 +48,7 @@
 <https://w3id.org/claimcheck/artefact/mace> a tl:Artefact ;
     sc:name "mace" .
 
-<https://w3id.org/claimcheck/claim/1> a evi:Claim ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/1> a evi:Claim ;
     rdfs:comment "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)" ;
     evi:supports <https://w3id.org/claimcheck/node/mace_e_int> ;
     tl:object <https://w3id.org/claimcheck/node/measured_affinity> ;
@@ -61,7 +56,7 @@
     tl:status "measured" ;
     tl:subject <https://w3id.org/claimcheck/node/mace_e_int> .
 
-<https://w3id.org/claimcheck/claim/2> a evi:Claim ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/2> a evi:Claim ;
     rdfs:comment "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)" ;
     evi:supports <https://w3id.org/claimcheck/node/mace_e_int> ;
     tl:object <https://w3id.org/claimcheck/node/interaction_strength> ;
@@ -69,17 +64,54 @@
     tl:status "falsified" ;
     tl:subject <https://w3id.org/claimcheck/node/mace_e_int> .
 
-<https://w3id.org/claimcheck/evidence/1> a evi:Evidence ;
-    rdfs:label "the premise of MACE triage: interaction energy ranks affinity well enough to spend the free-energy budget on the top slice" ;
-    sc:identifier "example/context.toml#relationship-1" ;
-    evi:directlySupports <https://w3id.org/claimcheck/relationship/1> ;
-    tl:extractedBy "human" .
-
-<https://w3id.org/claimcheck/evidence/2> a evi:Evidence ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/evidence/unnamed-1f82548f854f> a evi:Evidence ;
     rdfs:label "the assumption the triage rests on: the energy measures interaction, not size" ;
     sc:identifier "example/context.toml#relationship-2" ;
-    evi:directlySupports <https://w3id.org/claimcheck/relationship/2> ;
+    evi:directlySupports <https://w3id.org/claimcheck/exp/mace_vs_affinity/relationship/unnamed-1f82548f854f> ;
     tl:extractedBy "human" .
+
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/evidence/unnamed-44e0a36a12df> a evi:Evidence ;
+    rdfs:label "the premise of MACE triage: interaction energy ranks affinity well enough to spend the free-energy budget on the top slice" ;
+    sc:identifier "example/context.toml#relationship-1" ;
+    evi:directlySupports <https://w3id.org/claimcheck/exp/mace_vs_affinity/relationship/unnamed-44e0a36a12df> ;
+    tl:extractedBy "human" .
+
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/records/affinity.experimental_pKD> a cr:Field ;
+    rdfs:comment "Measured affinity as pKD. Dimensionless: it is a log ratio." ;
+    sc:name "experimental_pKD" ;
+    tl:inDataset "affinity" ;
+    tl:inFile <https://w3id.org/claimcheck/exp/mace_vs_affinity/file/experimental_affinity_csv> ;
+    tl:unit "1" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/records/mace.n_lig_atoms> a cr:Field ;
+    rdfs:comment "Ligand heavy-atom count — the obvious size confound." ;
+    sc:name "n_lig_atoms" ;
+    tl:inDataset "mace" ;
+    tl:inFile <https://w3id.org/claimcheck/exp/mace_vs_affinity/file/mace_energies_csv> ;
+    tl:unit "1" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/relationship/unnamed-44e0a36a12df> a tl:Relationship ;
+    rdfs:comment "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)" ;
+    evi:supports <https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/1> ;
+    tl:ciHigh -3.88048e-01 ;
+    tl:ciLow -5.0922e-01 ;
+    tl:claimId "unnamed-44e0a36a12df" ;
+    tl:claimIdDeclared false ;
+    tl:claimed -5e-01 ;
+    tl:estimate -4.50348e-01 ;
+    tl:inProject <https://w3id.org/claimcheck/project/mace_vs_affinity> ;
+    tl:joinCoverage 1e+00 ;
+    tl:joinKey "complex_name" ;
+    tl:joinMatched 637 ;
+    tl:method "pearson" ;
+    tl:resamplingUnit "compound_group" ;
+    tl:restsOn <https://w3id.org/claimcheck/exp/mace_vs_affinity/evidence/unnamed-44e0a36a12df> ;
+    tl:status "measured" ;
+    tl:verdict "agrees" ;
+    tl:x <https://w3id.org/claimcheck/exp/mace_vs_affinity/records/mace.e_int_kcal> ;
+    tl:y <https://w3id.org/claimcheck/exp/mace_vs_affinity/records/affinity.experimental_pKD> .
 
 <https://w3id.org/claimcheck/node/crystal_pose> a tl:Node ;
     rdfs:label "The pose the complex actually adopts" ;
@@ -92,43 +124,38 @@
         <https://w3id.org/claimcheck/node/mace_e_int> ;
     tl:nodeKind "reference" .
 
-<https://w3id.org/claimcheck/records/affinity.experimental_pKD> a cr:Field ;
-    rdfs:comment "Measured affinity as pKD. Dimensionless: it is a log ratio." ;
-    sc:name "experimental_pKD" ;
-    tl:inDataset "affinity" ;
-    tl:inFile <https://w3id.org/claimcheck/file/experimental_affinity_csv> ;
-    tl:unit "1" ;
-    tl:unitSystem "UDUNITS-2" .
-
-<https://w3id.org/claimcheck/records/mace.n_lig_atoms> a cr:Field ;
-    rdfs:comment "Ligand heavy-atom count — the obvious size confound." ;
-    sc:name "n_lig_atoms" ;
-    tl:inDataset "mace" ;
-    tl:inFile <https://w3id.org/claimcheck/file/mace_energies_csv> ;
-    tl:unit "1" ;
-    tl:unitSystem "UDUNITS-2" .
-
-<https://w3id.org/claimcheck/relationship/1> a tl:Relationship ;
-    rdfs:comment "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)" ;
-    evi:supports <https://w3id.org/claimcheck/claim/1> ;
-    tl:claimed -5e-01 ;
-    tl:estimate -4.50348e-01 ;
-    tl:joinCoverage 1e+00 ;
-    tl:joinKey "complex_name" ;
-    tl:joinMatched 637 ;
-    tl:method "pearson" ;
-    tl:restsOn <https://w3id.org/claimcheck/evidence/1> ;
-    tl:status "measured" ;
-    tl:verdict "agrees" ;
-    tl:x <https://w3id.org/claimcheck/records/mace.e_int_kcal> ;
-    tl:y <https://w3id.org/claimcheck/records/affinity.experimental_pKD> .
-
-<https://w3id.org/claimcheck/file/experimental_affinity_csv> a cr:FileObject ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/file/experimental_affinity_csv> a cr:FileObject ;
     sc:name "experimental_affinity_csv" ;
     sc:sha256 "b1dc99b64502928fbe4c83c70a8cb331721016f2ff81d1bd1977e7f5e0c48628" ;
     tl:manualSource "Exported by hand from the project's curated affinity table, 2026-08-15" ;
     tl:origin "manual" ;
     tl:retrieved "2026-08-15" .
+
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/records/mace.e_int_kcal> a cr:Field ;
+    rdfs:comment "MACE-OFF interaction energy. Converted from eV by the prepare rule." ;
+    sc:name "e_int_kcal" ;
+    tl:inDataset "mace" ;
+    tl:inFile <https://w3id.org/claimcheck/exp/mace_vs_affinity/file/mace_energies_csv> ;
+    tl:unit "kcal/mol" ;
+    tl:unitSystem "UDUNITS-2" .
+
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/relationship/unnamed-1f82548f854f> a tl:Relationship ;
+    rdfs:comment "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)" ;
+    evi:supports <https://w3id.org/claimcheck/exp/mace_vs_affinity/claim/2> ;
+    tl:ciHigh -5.25401e-01 ;
+    tl:ciLow -6.50623e-01 ;
+    tl:claimId "unnamed-1f82548f854f" ;
+    tl:claimIdDeclared false ;
+    tl:claimed 0e+00 ;
+    tl:estimate -5.89335e-01 ;
+    tl:inProject <https://w3id.org/claimcheck/project/mace_vs_affinity> ;
+    tl:method "pearson" ;
+    tl:resamplingUnit "compound_group" ;
+    tl:restsOn <https://w3id.org/claimcheck/exp/mace_vs_affinity/evidence/unnamed-1f82548f854f> ;
+    tl:status "falsified" ;
+    tl:verdict "refuted" ;
+    tl:x <https://w3id.org/claimcheck/exp/mace_vs_affinity/records/mace.e_int_kcal> ;
+    tl:y <https://w3id.org/claimcheck/exp/mace_vs_affinity/records/mace.n_lig_atoms> .
 
 <https://w3id.org/claimcheck/node/interaction_strength> a tl:Node ;
     rdfs:label "The physical quantity the triage means to rank on" ;
@@ -136,27 +163,12 @@
         <https://w3id.org/claimcheck/node/vina_score> ;
     tl:nodeKind "quantity" .
 
-<https://w3id.org/claimcheck/records/mace.e_int_kcal> a cr:Field ;
-    rdfs:comment "MACE-OFF interaction energy. Converted from eV by the prepare rule." ;
-    sc:name "e_int_kcal" ;
-    tl:inDataset "mace" ;
-    tl:inFile <https://w3id.org/claimcheck/file/mace_energies_csv> ;
-    tl:unit "kcal/mol" ;
-    tl:unitSystem "UDUNITS-2" .
+<https://w3id.org/claimcheck/project/mace_vs_affinity> a sc:Dataset ;
+    sc:distribution <https://w3id.org/claimcheck/exp/mace_vs_affinity/file/experimental_affinity_csv>,
+        <https://w3id.org/claimcheck/exp/mace_vs_affinity/file/mace_energies_csv> ;
+    sc:name "mace_vs_affinity" .
 
-<https://w3id.org/claimcheck/relationship/2> a tl:Relationship ;
-    rdfs:comment "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)" ;
-    evi:supports <https://w3id.org/claimcheck/claim/2> ;
-    tl:claimed 0e+00 ;
-    tl:estimate -5.89335e-01 ;
-    tl:method "pearson" ;
-    tl:restsOn <https://w3id.org/claimcheck/evidence/2> ;
-    tl:status "falsified" ;
-    tl:verdict "refuted" ;
-    tl:x <https://w3id.org/claimcheck/records/mace.e_int_kcal> ;
-    tl:y <https://w3id.org/claimcheck/records/mace.n_lig_atoms> .
-
-<https://w3id.org/claimcheck/file/mace_energies_csv> a cr:FileObject ;
+<https://w3id.org/claimcheck/exp/mace_vs_affinity/file/mace_energies_csv> a cr:FileObject ;
     sc:name "mace_energies_csv" ;
     sc:sha256 "065bbfce7c38b27ab41b35aecd009e2005de9a968d622b148b6d224cb8e41606" ;
     tl:origin "computed" .

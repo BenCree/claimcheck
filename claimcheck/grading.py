@@ -651,16 +651,47 @@ def quotable(root: Path | str, paths=None, *, reproduced=()) -> dict[str, Grade]
             if v.quotable}
 
 
+#: Where the `graph` rule writes the experiment's results into the corpus. Half
+#: of what "in the system" means, and the half this module used to say nothing
+#: about: on 2026-11-17 eight directories under one programme's `experiments/`
+#: held a `context.toml` and no such file, while every file in them graded
+#: `EXECUTED` and was quotable, and their numbers were being quoted.
+GRAPH_TTL = "results/graph.ttl"
+
+
+def in_the_system(root: Path | str) -> dict:
+    """Whether this directory's results are in the corpus, and not only quotable.
+
+    The house definition (Ben, 2026-11-13) has two halves: the grades below, and
+    the ontology graph the `graph` rule emits. A directory can be fully
+    `EXECUTED` and still be nowhere, because a verdict sitting in one directory
+    is not in the corpus that the next experiment is planned from. Grading knew
+    the file was missing and said nothing, which left it to a reader to notice.
+    """
+    root = Path(root)
+    p = root / GRAPH_TTL
+    return {"path": str(p.resolve()), "exists": p.is_file(),
+            "why": ("in the corpus" if p.is_file() else
+                    f"NOT IN THE SYSTEM: {p.resolve()} does not exist, so these verdicts are in "
+                    f"this directory and nowhere else. Run the `graph` rule.")}
+
+
 def report(root: Path | str, paths=None, *, reproduced=()) -> dict:
     """The whole verdict as JSON, for a rule to write or a reader to diff."""
     graded = grade_all(root, paths, reproduced=reproduced)
     counts: dict[str, int] = {}
     for g in graded.values():
         counts[g.grade] = counts.get(g.grade, 0) + 1
+    graph = in_the_system(root)
     return {
         "root": str(Path(root).resolve()),
         "files": len(graded),
         "quotable": sum(1 for g in graded.values() if g.quotable),
+        # BOTH HALVES OF "IN THE SYSTEM", so a consumer of this report cannot read
+        # the grades and conclude the work is in the corpus when it is not.
+        "graph_ttl": graph,
+        "in_the_system": bool(graph["exists"] and graded
+                              and all(g.quotable for g in graded.values())),
         "by_grade": dict(sorted(counts.items())),
         "grades": {k: {"grade": v.grade, "rule": v.rule, "sha256": v.sha256,
                        "quotable": v.quotable, "stale": v.stale,
@@ -1037,6 +1068,17 @@ def main(argv: list[str] | None = None) -> int:
     n_quotable = sum(1 for grade in graded.values() if grade.quotable)
     print(f"\n{n_quotable} of {len(graded)} quotable "
           f"({', '.join(f'{k}: {v}' for k, v in sorted(_counts(graded).items()))})")
+    # THE SECOND HALF OF "IN THE SYSTEM", printed whether it is there or not, and
+    # printed as the last thing a reader sees. The exit status is deliberately
+    # unchanged: `--check` asks whether every number is quotable, which is a
+    # different question from whether the results reached the corpus.
+    graph = in_the_system(root)
+    if graph["exists"]:
+        print(f"  in the system: {graph['path']} is present")
+    else:
+        print(f"  {graph['why']}")
+        print("  Quotable and in the system are two questions. These files pass the first and fail "
+              "the second: nothing else can cite them, and no proposal can be drawn off them.")
     if a.json:
         out = Path(a.json)
         out.parent.mkdir(parents=True, exist_ok=True)

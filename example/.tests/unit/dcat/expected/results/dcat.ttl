@@ -26,7 +26,7 @@
     dct:title "experimental_affinity.csv" ;
     spdx:checksum <https://w3id.org/claimcheck/checksum/data_experimental_affinity.csv> ;
     dcat:byteSize "14609"^^xsd:nonNegativeInteger ;
-    dcat:downloadURL "data/experimental_affinity.csv" ;
+    dcat:downloadURL "../data/experimental_affinity.csv" ;
     dcat:mediaType "text/csv" .
 
 <https://w3id.org/claimcheck/distribution/data_mace_energies.csv> a dcat:Distribution ;
@@ -34,6 +34,6 @@
     dct:title "mace_energies.csv" ;
     spdx:checksum <https://w3id.org/claimcheck/checksum/data_mace_energies.csv> ;
     dcat:byteSize "25933"^^xsd:nonNegativeInteger ;
-    dcat:downloadURL "data/mace_energies.csv" ;
+    dcat:downloadURL "../data/mace_energies.csv" ;
     dcat:mediaType "text/csv" .
 

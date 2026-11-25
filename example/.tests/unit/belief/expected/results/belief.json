@@ -1,0 +1,199 @@
+{
+  "summary": {
+    "nodes": 6,
+    "claims": 6,
+    "artefacts": 2,
+    "recomputed": 2,
+    "by_status": {
+      "assumed": 2,
+      "by_construction": 2,
+      "falsified": 1,
+      "measured": 1
+    },
+    "stale_pairs": 6,
+    "open_questions": 2,
+    "caveats": 2,
+    "caveat_deliveries": 2,
+    "caveats_undeliverable": 0,
+    "contradictory_triples": 0,
+    "vocabulary": {
+      "predicates": 13,
+      "statuses": 7,
+      "node_kinds": 7,
+      "open_question_statuses": [
+        "assumed",
+        "contested",
+        "untested"
+      ],
+      "caveat_statuses": [
+        "assumed",
+        "contested",
+        "falsified",
+        "untested"
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "id": "mace_e_int",
+      "kind": "quantity",
+      "label": "MACE-OFF interaction energy, evaluated on the docked pose"
+    },
+    {
+      "id": "interaction_strength",
+      "kind": "quantity",
+      "label": "The physical quantity the triage means to rank on"
+    },
+    {
+      "id": "measured_affinity",
+      "kind": "reference",
+      "label": "Binding affinity measured in the assay, as pKD"
+    },
+    {
+      "id": "docked_pose",
+      "kind": "representation",
+      "label": "The pose the energy is evaluated on"
+    },
+    {
+      "id": "crystal_pose",
+      "kind": "reference",
+      "label": "The pose the complex actually adopts"
+    },
+    {
+      "id": "vina_score",
+      "kind": "method",
+      "label": "The docking score this pipeline replaced"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "mace_e_int --preserves_ordering_of--> measured_affinity",
+      "subject": "mace_e_int",
+      "predicate": "preserves_ordering_of",
+      "object": "measured_affinity",
+      "status": "measured",
+      "evidence": "claimed -0.5 lies within the 95% CI [-0.509, -0.388] for r = -0.450, resampling 493 compound_group(s)",
+      "note": "",
+      "recomputed_from": "mace.e_int_kcal ~ affinity.experimental_pKD"
+    },
+    {
+      "claim": "mace_e_int --approximates--> interaction_strength",
+      "subject": "mace_e_int",
+      "predicate": "approximates",
+      "object": "interaction_strength",
+      "status": "falsified",
+      "evidence": "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)",
+      "note": "",
+      "recomputed_from": "mace.e_int_kcal ~ mace.n_lig_atoms"
+    },
+    {
+      "claim": "mace_e_int --depends_on--> docked_pose",
+      "subject": "mace_e_int",
+      "predicate": "depends_on",
+      "object": "docked_pose",
+      "status": "by_construction",
+      "evidence": "",
+      "note": "",
+      "recomputed_from": ""
+    },
+    {
+      "claim": "docked_pose --approximates--> crystal_pose",
+      "subject": "docked_pose",
+      "predicate": "approximates",
+      "object": "crystal_pose",
+      "status": "assumed",
+      "evidence": "",
+      "note": "",
+      "recomputed_from": ""
+    },
+    {
+      "claim": "mace_e_int --supersedes--> vina_score",
+      "subject": "mace_e_int",
+      "predicate": "supersedes",
+      "object": "vina_score",
+      "status": "by_construction",
+      "evidence": "",
+      "note": "",
+      "recomputed_from": ""
+    },
+    {
+      "claim": "vina_score --approximates--> interaction_strength",
+      "subject": "vina_score",
+      "predicate": "approximates",
+      "object": "interaction_strength",
+      "status": "assumed",
+      "evidence": "",
+      "note": "",
+      "recomputed_from": ""
+    }
+  ],
+  "rests_on": {
+    "affinity": [
+      "measured_affinity"
+    ],
+    "mace": [
+      "mace_e_int"
+    ]
+  },
+  "open_questions": [
+    {
+      "claim": "docked_pose --approximates--> crystal_pose",
+      "status": "assumed",
+      "subject": "docked_pose",
+      "predicate": "approximates",
+      "object": "crystal_pose",
+      "predicate_means": "subject is a cheaper or rougher stand-in for object's physics",
+      "why_open": "taken as true, never tested",
+      "note": "",
+      "recomputed_from": "",
+      "defined_in": ""
+    },
+    {
+      "claim": "vina_score --approximates--> interaction_strength",
+      "status": "assumed",
+      "subject": "vina_score",
+      "predicate": "approximates",
+      "object": "interaction_strength",
+      "predicate_means": "subject is a cheaper or rougher stand-in for object's physics",
+      "why_open": "taken as true, never tested",
+      "note": "",
+      "recomputed_from": "",
+      "defined_in": ""
+    }
+  ],
+  "caveats": [
+    {
+      "artefact": "mace",
+      "rests_on": [
+        "mace_e_int"
+      ],
+      "claim": "docked_pose --approximates--> crystal_pose",
+      "subject": "docked_pose",
+      "predicate": "approximates",
+      "object": "crystal_pose",
+      "status": "assumed",
+      "evidence": "",
+      "note": "",
+      "recomputed_from": "",
+      "open_question": true,
+      "why": "taken as true, never tested"
+    },
+    {
+      "artefact": "mace",
+      "rests_on": [
+        "mace_e_int"
+      ],
+      "claim": "mace_e_int --approximates--> interaction_strength",
+      "subject": "mace_e_int",
+      "predicate": "approximates",
+      "object": "interaction_strength",
+      "status": "falsified",
+      "evidence": "claimed 0.0 lies OUTSIDE the 95% CI [-0.651, -0.525] for r = -0.589, resampling 493 compound_group(s)",
+      "note": "",
+      "recomputed_from": "mace.e_int_kcal ~ mace.n_lig_atoms",
+      "open_question": false,
+      "why": "we tested it and it is false. A RESULT, not a gap \u2014 it raises no open question, and it carries a caveat on every number resting on it."
+    }
+  ],
+  "contradictions": []
+}

@@ -44,6 +44,47 @@ def sha256(p: Path) -> str:
     return h.hexdigest()
 
 
+def slug(name: str) -> str:
+    """One `@id`, with every character a reference resolver may choke on gone.
+
+    `@id`s ARE SLUGGED. A dot in a node id makes `mlcroissant` report
+    "reference to node with UUID 'x.csv' ... but this node doesn't exist" — the
+    dot breaks reference resolution. `contentUrl` keeps the real path.
+    """
+    return "".join(c if c.isalnum() else "_" for c in str(name))
+
+
+def file_id(rel: str) -> str:
+    """The `@id` of one declared file: THE WHOLE DECLARED PATH, not its basename.
+
+    **THE DEFECT THIS FIXES (2026-11-22).** Until this date the id was
+    `slug(Path(rel).name)`, so two declared files whose basenames agree got ONE
+    node: an experiment declaring eight distinct `edges_plot.csv` under
+    different directories published a single `edges_plot_csv` carrying eight
+    different `sha256` values, and the corpus merge counted 69 such conflated
+    subjects inside single experiments
+    (`/home/ben/code/shared/corpus/results/queries.md`). `claimcheck.graph`
+    mints its file node from this id, so the same collapse reached the graph.
+    rdflib and `mlcroissant` both merge by id and raise nothing, so a package
+    validated while describing the wrong bytes.
+
+    The id is derived from the declared path UNCONDITIONALLY rather than
+    disambiguated only where a collision is noticed: an id that depends on which
+    other files happen to sit beside it changes when an unrelated dataset is
+    added, and a reader cannot tell which rule produced it.
+
+    **IT IS NOT INJECTIVE AND `build` REFUSES THE CASE IT CANNOT NAME.** Every
+    non-alphanumeric character becomes `_`, so `arm_a/edges.csv` and
+    `arm/a_edges.csv` are two different files with one id. Narrowing the
+    character class would be a second incompatible change to every id, so
+    instead `build` refuses a project declaring such a pair and says which two
+    paths collide; measured over the corpus on 2026-11-22, the count of
+    affected experiments is in
+    `/home/ben/code/shared/corpus/data/file_ids.csv`.
+    """
+    return slug(str(rel))
+
+
 #: Croissant 1.1's atomic types, in full. The spec's table lists exactly these
 #: five -- there is no Time, and there is no unit mechanism anywhere in the
 #: format, which is why units go in our own namespace beside the field.
@@ -150,17 +191,29 @@ def build(root: Path | str, claims_path: Path | None = None,
     """
     root = Path(root)          # same reason as `relate.check`
     ctx = tomllib.loads((root / "context.toml").read_text())
-    proj = ctx["project"]
+    from claimcheck.emit import project_table
+    proj = project_table(ctx)
     claims_file = claims_path or (root / "results/claims.json")
     claims = (json.loads(claims_file.read_text())
               if claims_file.is_file() else {"relationships": []})
 
-    def slug(name: str) -> str:
-        # `@id`s ARE SLUGGED. A dot in a node id makes `mlcroissant` report
-        # "reference to node with UUID 'x.csv' ... but this node doesn't
-        # exist" — the dot breaks reference resolution. `contentUrl` keeps the
-        # real path.
-        return "".join(c if c.isalnum() else "_" for c in name)
+    # TWO DECLARED PATHS, ONE `@id` IS REFUSED (2026-11-22). `file_id` is not
+    # injective, so a project could still publish one node for two files and
+    # that is the whole defect this change exists to remove. It is refused here
+    # rather than silently disambiguated, because the author knows which of the
+    # two paths should be renamed and this code does not.
+    seen_ids: dict[str, str] = {}
+    for d_ in ctx["datasets"]:
+        for rel_ in d_["files"]:
+            fid = file_id(rel_)
+            prior = seen_ids.setdefault(fid, str(rel_))
+            if prior != str(rel_):
+                raise ValueError(
+                    f"{root / 'context.toml'} declares {prior!r} and {rel_!r}, "
+                    f"which are different files with one Croissant @id "
+                    f"({fid!r}): every character that is not a letter or a "
+                    f"digit becomes '_'. One node would carry both digests and "
+                    f"no reader could tell. Rename one of the two paths")
 
     by_ds: dict[str, list[dict]] = {}
     for v in ctx.get("variables", []):
@@ -168,11 +221,11 @@ def build(root: Path | str, claims_path: Path | None = None,
 
     dist, record_sets = [], []
     for d in ctx["datasets"]:
-        first = slug(Path(d["files"][0]).name)
+        first = file_id(d["files"][0])
         for rel in d["files"]:
             p_ = root / rel
-            fo = {"@type": "cr:FileObject", "@id": slug(Path(rel).name),
-                  "name": slug(Path(rel).name),
+            fo = {"@type": "cr:FileObject", "@id": file_id(rel),
+                  "name": file_id(rel),
                   "contentUrl": _content_url(root, rel, out_dir),
                   "encodingFormat": "text/csv", "sha256": sha256(p_)}
             # THE ORIGIN TRAVELS WITH THE FILE. A consumer who cannot tell a
@@ -233,6 +286,11 @@ def build(root: Path | str, claims_path: Path | None = None,
         f"{NS}joins": claims.get("joins", []),
         f"{NS}claims": [
             {"x": r["x"], "y": r["y"], "xUnit": r.get("x_unit"),
+             # THE THIRD COLUMN, where a method has one (`roc_auc_difference`, 2026-11-20). Added only when the claim
+             # declares it, so every existing package stays byte-identical. Without it two claims that differ ONLY in
+             # what the score was compared against (a CNN affinity against heavy-atom count, and the same affinity
+             # against cLogP) are indistinguishable in the published metadata: same x, same y, two different numbers.
+             **({"baseline": r["baseline"], "baselineUnit": r.get("baseline_unit")} if r.get("baseline") else {}),
              "yUnit": r.get("y_unit"), "crossDataset": r.get("cross_dataset"),
              "method": r["method"], "claimed": r.get("claimed"),
              "claimedRange": r.get("claimed_range"),

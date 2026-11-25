@@ -191,11 +191,19 @@ def test_only_modules_that_declare_the_extra_reach_for_it():
     `_BUILTIN` says which module needs which extra, `_EXTRA_PROBE` says which
     packages that extra brings.
     """
-    from claimcheck.emit import _BUILTIN, _EXTRA_PROBE
+    from claimcheck.emit import _BUILTIN, _EXTRA_CONSUMERS, _EXTRA_PROBE
 
     #: package -> the module filenames permitted to import it.
     allowed: dict[str, set[str]] = {}
-    for mod, extra, _ in _BUILTIN.values():
+    declared = [(mod, extra) for mod, extra, _ in _BUILTIN.values()]
+    # AND the modules that consume an extra's package without emitting a
+    # format, which `_BUILTIN` cannot hold because every entry there must have
+    # a `render(root)` (`test_emitters.py`). `claimcheck.corpus` merges many
+    # projects' graphs and needs rdflib for the same reason `graph` does.
+    # Registering it in `_BUILTIN` instead was tried on 2026-11-20 and made
+    # `test_every_builtin_format_renders_text` fail for being right.
+    declared += list(_EXTRA_CONSUMERS.items())
+    for mod, extra in declared:
         for pkg in _EXTRA_PROBE.get(extra or "", ()):
             allowed.setdefault(pkg, set()).add(mod.rsplit(".", 1)[-1] + ".py")
 

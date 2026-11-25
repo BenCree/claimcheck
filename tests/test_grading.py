@@ -459,3 +459,51 @@ def test_a_constrained_wildcard_is_read_as_a_wildcard():
     from claimcheck.grading import _produces
 
     assert _produces("data/cost_cpu.csv", {"data/cost_{device,(cpu|cuda)}.csv"})
+
+
+# ---------------------------------------------------------------------------
+# The second half of "in the system": results/graph.ttl
+# ---------------------------------------------------------------------------
+#
+# The house definition has two halves, the grades above and the ontology graph,
+# and until 2026-11-17 this module said nothing about the second: thirteen
+# experiment directories had no `results/graph.ttl`, both stage-8 experiments
+# among them, and their numbers were being quoted. Grading knew and left it to
+# a reader to notice.
+
+def _graded_dir(tmp_path: Path) -> Path:
+    root = tmp_path / "proj"
+    (root / "results").mkdir(parents=True)
+    (root / "context.toml").write_text(MINIMAL_CONTEXT)
+    (root / "results" / "x.csv").write_text("a\n1\n")
+    return root
+
+
+def test_a_directory_with_no_graph_says_so_loudly_and_in_the_report(tmp_path, capsys):
+    root = _graded_dir(tmp_path)
+    assert grading.in_the_system(root)["exists"] is False
+    rep = grading.report(root)
+    assert rep["graph_ttl"]["exists"] is False and rep["in_the_system"] is False
+    assert grading.main([str(root)]) == 0        # the exit status is NOT changed: see the rule's comment
+    out = capsys.readouterr().out
+    assert "NOT IN THE SYSTEM" in out and "results/graph.ttl" in out
+
+
+def test_the_same_directory_with_a_graph_says_it_is_in_the_system(tmp_path, capsys):
+    """THE OTHER SIDE, so the line above is not printed over every directory."""
+    root = _graded_dir(tmp_path)
+    (root / "results" / "graph.ttl").write_text("# a graph\n")
+    assert grading.in_the_system(root)["exists"] is True
+    assert grading.report(root)["graph_ttl"]["exists"] is True
+    assert grading.main([str(root)]) == 0
+    out = capsys.readouterr().out
+    assert "in the system:" in out and "NOT IN THE SYSTEM" not in out
+
+
+def test_quotable_and_in_the_system_are_two_questions(tmp_path):
+    """A directory whose every file is quotable is still not in the corpus
+    without the graph, and the report says both separately."""
+    root = _graded_dir(tmp_path)
+    rep = grading.report(root)
+    assert rep["in_the_system"] is False
+    assert "quotable" in rep and "graph_ttl" in rep

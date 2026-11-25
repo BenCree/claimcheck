@@ -245,10 +245,14 @@ rcParams and sets others itself, so a style file changes only the first group.
 `matplotlib.style` also drops the keys that are not about style (`backend` and the others
 in `STYLE_BLACKLIST`) with a warning, so a style cannot change the Agg backend.
 
-Snakemake does not track the style. The figures are a side effect of `check_claims`, the
-variable is not an input, and the shared rule treats `context.toml` as `ancient()`, so
-editing the style file, or adding or changing the key, does not by itself redraw the
-figures. A project with its own `claim_figures` rule redraws them with
+Snakemake tracks the `figstyle` KEY and not the style FILE (2026-11-22). The shared rule
+still treats `context.toml` as `ancient()`, so its modification time decides nothing, but
+`check_claims` now carries a `params` digest of the fields a verdict is computed from
+(`claimcheck.workflow.verdict_digest`), and the whole `[project]` table is inside it.
+Adding or changing the key therefore redraws the figures, and re-adjudicates with them.
+Editing the style file it points at still changes nothing: the file is not an input, the
+environment variable is not an input, and the figures are a side effect of `check_claims`
+rather than a declared output. A project with its own `claim_figures` rule redraws them with
 `snakemake --forcerun claim_figures`, which leaves the verdicts alone. A project that
 relies on the shared rule only has no rule that draws the figures alone:
 `snakemake --forcerun check_claims` redraws them, but also reruns `relate`, rewrites

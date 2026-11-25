@@ -58,6 +58,11 @@ list is (1 - exp(-alpha * z)) / (1 - exp(-alpha)):
 A claim with no `alpha`, or one that is not a positive finite number, is `unverifiable` and says so. The value is recorded on the
 row as `alpha`, with `weight_share_top_8pct` beside it. Two claims at two alphas on one table are two different claims.
 
+**Comparing two score columns is a different claim**, not two of these read against each other: two separately
+adjudicated BEDROCs share the cohort variance that dominates each interval, so their overlap says nothing about their
+difference. That is `bedroc_difference` (2026-11-22, `docs/bedroc_difference.md`), the paired difference at one alpha on
+identical rows.
+
 ## Why it exists beside `roc_auc`
 
 AUC weights every positive alike wherever it sits: with 10 positives among 1,000, moving one from position 500 to 400 changes it by

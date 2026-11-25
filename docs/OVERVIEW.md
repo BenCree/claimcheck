@@ -222,6 +222,16 @@ flowchart LR
 recipe, not a result.** It also finds files Snakemake recorded producing that
 are no longer on disk — `--vanished`.
 
+**Sizing a re-adjudication: the resampling unit count drives the time, not the
+claim count.** Measured on one host, 2026-11-18, over 17 experiment directories,
+each wall time covering `check_claims` and the emitters that project declares,
+with `relate` dominating: 7 claims in 3 s (`cry1_h08_mmgbsa`), 24 claims in
+1 m 29 s (`charged_bench`), 22 claims in 17 m 06 s (`cry1_chemspace_funnel`,
+15,501 Butina clusters) and 30 claims in 49 m (`cry1_screen_pose_and_apo`). The
+bootstrap and the cluster permutation both scale with the units, so a small
+declaration over a large cohort costs far more than a large declaration over a
+small one, and 17 directories took 2 h 24 m of one core in all.
+
 ---
 
 ## Publishing

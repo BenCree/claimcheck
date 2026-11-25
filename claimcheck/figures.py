@@ -92,7 +92,13 @@ from typing import Any
 
 from claimcheck.datasets import DatasetError, join
 from claimcheck.datasets import load as load_dataset
-from claimcheck.relate import _paired, _ref
+from claimcheck.relate import (
+    PAIRED_DIFFERENCE_METHODS,
+    _bedroc_bounds,
+    _bedroc_weights,
+    _paired,
+    _ref,
+)
 
 MM = 1.0 / 25.4                             # inches per millimetre; the guide states every size in millimetres
 POINT_COLOUR = "#333333"                    # one colour for one series; the verdict is not drawn, so no colour encodes it
@@ -129,6 +135,23 @@ def _num(v: object, fmt: str = "{:+.3f}") -> str:
     return fmt.format(v) if isinstance(v, (int, float)) and math.isfinite(v) else "n/a"
 
 
+def _bound(v: object) -> str:
+    """One side of a `claimed_range`, for the caption.
+
+    An INFINITE side is written as a direction and not as a number, because that is what an open range means and what
+    `docs/RULES.md` says it is spelled as. A NON-NUMERIC side renders as itself rather than raising: a bound stored as the
+    string "inf" instead of TOML's float `inf` is wrong in the declaration, and four `context.toml` files in this tree carry
+    it, but a bad bound must not take the figure run down with it. Before 2026-11-22 this line formatted the bound with a raw
+    `{:g}`, so one such claim raised `ValueError: Unknown format code 'g' for object of type 'str'` and EVERY CLAIM AFTER IT
+    went undrawn, which is the fail-soft rule broken: never let one item exit a loop over many.
+    """
+    if isinstance(v, (int, float)):
+        if math.isinf(v):
+            return "-inf" if v < 0 else "inf"
+        return f"{v:g}"
+    return str(v)
+
+
 def result_line(claim: dict) -> str:
     """Estimate, interval, units, claimed value, verdict, p and R squared, in one line."""
     verdict = str(claim.get("verdict", "unverifiable"))
@@ -138,7 +161,7 @@ def result_line(claim: dict) -> str:
     if claim.get("kind") == "value":
         # a value claim: the method's value, its interval, and the claimed value or range; no p and no R squared (relate reports none)
         rng = claim.get("claimed_range")
-        what = f"claimed range [{rng[0]:g}, {rng[1]:g}]" if rng else f"claimed {_num(claim.get('claimed'), '{:.4g}')}"
+        what = f"claimed range [{_bound(rng[0])}, {_bound(rng[1])}]" if rng else f"claimed {_num(claim.get('claimed'), '{:.4g}')}"
         if claim.get("ci_lo") is None:
             return f"{claim['method']} = {_num(claim.get('estimate'), '{:.4g}')}, no interval; {what}: {verdict.upper()}. {claim.get('why', '')}"
         return (f"{claim['method']} = {_num(claim.get('estimate'), '{:.4g}')}, 95% CI [{_num(claim.get('ci_lo'), '{:.4g}')}, "
@@ -182,10 +205,125 @@ def axis_label(claim: dict, side: str, fallback: str) -> str:
     return f"{claim.get(side, fallback)} ({claim.get(f'{side}_unit') or 'unit not declared'})"
 
 
+def two_curves(claim: dict, pairs: list) -> bool:
+    """Whether this claim is drawn as two ROC curves rather than a scatter: a `roc_auc_difference`, whose pairs are
+    `(label, (score, baseline))`.
+
+    THE FIGURE HAS TO SHOW THE CLAIMED QUANTITY. Drawn as a scatter this claim would put the binary label on one axis and
+    the method's score on the other, which is the figure its `roc_auc` neighbour already has, and would leave the
+    baseline, the whole comparison, off the canvas. Two ROC curves on one pair of axes show both columns, and the signed
+    area between them IS the estimate (2026-11-20, with `relate.roc_auc_difference`)."""
+    return bool(pairs) and str(claim.get("method", "")) == "roc_auc_difference" and isinstance(pairs[0][1], tuple)
+
+
+def two_weighted_curves(claim: dict, pairs: list) -> bool:
+    """Whether this claim is drawn as two WEIGHTED enrichment curves: a `bedroc_difference` (2026-11-22).
+
+    The ROC pair is the wrong canvas for it. A BEDROC difference can be large where the two ROC curves are almost on top
+    of one another (10 actives of 1,000 at positions 1 to 5 and 496 to 500 against 248 to 257: AUROC 0.7525 against
+    0.7505, BEDROC at alpha 20 0.5250 against 0.0072), so drawing the ROC curves would show a reader two nearly
+    identical lines beside an estimate of half the scale and define neither. The curve drawn instead is the one whose
+    endpoint IS each column's BEDROC, so the vertical gap at the right-hand edge is the estimate."""
+    return bool(pairs) and str(claim.get("method", "")) == "bedroc_difference" and isinstance(pairs[0][1], tuple)
+
+
+def bedroc_curve(labels: list[float], scores: list[float], alpha: float,
+                 expected: bool = False) -> tuple[list[float], list[float]]:
+    """The weighted enrichment curve of one score column as `(fraction of the list screened, normalised weight of the actives found)`.
+
+    THE CURVE WHOSE ENDPOINT IS THE BEDROC. At list position k of N the value is
+    `(sum of the weights exp(-alpha * j / N) of the actives at positions j <= k - S_min) / (S_max - S_min)`, so at k = N
+    it is exactly `relate.bedroc` and at k = 0 it is `-S_min / (S_max - S_min)`, which is 0 to within rounding wherever
+    alpha is large enough for the claim to be about early recognition (S_min is the weight of the LAST n_pos positions,
+    each below exp(-alpha); the test bounds the start of the curve at 1e-6 of the span).
+    The two columns of one claim share N, the active count and alpha, so they share S_min and S_max, and THE VERTICAL
+    GAP BETWEEN THE TWO CURVES AT THE RIGHT-HAND EDGE IS THE ESTIMATE, exactly, as the area between two ROC curves is
+    the AUROC difference.
+
+    ONE VERTEX PER DISTINCT SCORE VALUE, with a tied block contributing `(actives in it) * (mean weight over it)`, which
+    is the same tie rule `relate.bedroc` applies: the expectation over a random order within the tie.
+
+    `expected = True` draws the chance reference instead, the curve a uniformly random ranking gives on average: every
+    position carries the active fraction, so it ends at `relate.bedroc_random_expectation`. It is this figure's
+    equivalent of the ROC diagonal and it is NOT a straight line, which is the point BEDROC exists to make.
+
+    Empty lists where either class is empty or alpha is unusable, which is the case the claim reads `unverifiable` for.
+    """
+    n_total = len(labels)
+    n_pos = sum(1 for v in labels if v >= 0.5)
+    if not n_total or not n_pos or n_pos == n_total or not isinstance(alpha, (int, float)) or not alpha > 0:
+        return [], []
+    bounds = _bedroc_bounds(n_pos, n_total, float(alpha))
+    if bounds is None:
+        return [], []
+    s_min, s_max, _ = bounds
+    w = _bedroc_weights(n_total, float(alpha))
+    span = s_max - s_min
+    xs, ys, acc = [0.0], [-s_min / span], 0.0
+    if expected:
+        share = n_pos / n_total
+        for k in range(n_total):
+            acc += share * w[k]
+            xs.append((k + 1) / n_total)
+            ys.append((acc - s_min) / span)
+        return xs, ys
+    order = sorted(range(n_total), key=lambda i: -scores[i])
+    i = 0
+    while i < n_total:
+        j = i
+        while j + 1 < n_total and scores[order[j + 1]] == scores[order[i]]:
+            j += 1
+        in_block = sum(1 for k in range(i, j + 1) if labels[order[k]] >= 0.5)
+        if in_block:
+            acc += in_block * math.fsum(w[i:j + 1]) / (j - i + 1)
+        xs.append((j + 1) / n_total)
+        ys.append((acc - s_min) / span)
+        i = j + 1
+    return xs, ys
+
+
+def roc_points(labels: list[float], scores: list[float]) -> tuple[list[float], list[float]]:
+    """The ROC curve as `(false positive rates, true positive rates)`, from (0, 0) to (1, 1).
+
+    ONE VERTEX PER DISTINCT SCORE, not per row: a block of tied scores is one step, so the segment across it is the
+    diagonal that a tie earns and the area under the drawn curve is the AUROC `relate.roc_auc` reports from mid-ranks.
+    The label is read as an indicator at >= 0.5, as everywhere else. Empty lists where either class is empty, which is
+    the case the claim comes back `unverifiable` for."""
+    pos = sum(1 for v in labels if v >= 0.5)
+    neg = len(labels) - pos
+    if not pos or not neg:
+        return [], []
+    order = sorted(range(len(scores)), key=lambda i: -scores[i])
+    fpr, tpr, tp, fp, i = [0.0], [0.0], 0, 0, 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and scores[order[j + 1]] == scores[order[i]]:
+            j += 1
+        for k in range(i, j + 1):
+            if labels[order[k]] >= 0.5:
+                tp += 1
+            else:
+                fp += 1
+        fpr.append(fp / neg)
+        tpr.append(tp / pos)
+        i = j + 1
+    return fpr, tpr
+
+
+def curve_names(claim: dict, y: str = "") -> tuple[str, str]:
+    """The two series' names for the key: the score column and the baseline column, bare of their dataset prefixes."""
+    return (str(claim.get("y") or y).rpartition(".")[2] or "score",
+            str(claim.get("baseline") or "baseline").rpartition(".")[2] or "baseline")
+
+
 def identity_drawn(claim: dict, pairs: list) -> bool:
     """Whether the y = x line belongs on this figure: there are points, both columns declare the same unit, and they are not the
-    same column. A `kind = "value"` claim declares `x = y`, where y = x runs through every point and carries no information."""
-    return (bool(pairs) and bool(claim.get("x_unit")) and claim.get("x_unit") == claim.get("y_unit")
+    same column. A `kind = "value"` claim declares `x = y`, where y = x runs through every point and carries no information.
+
+    Never on a two-curve figure, whose axes are rates or shares of a weight and whose reference line is the chance
+    ranking: a different mark with a different meaning, which that figure draws and defines itself."""
+    return (bool(pairs) and not two_curves(claim, pairs) and not two_weighted_curves(claim, pairs)
+            and bool(claim.get("x_unit")) and claim.get("x_unit") == claim.get("y_unit")
             and str(claim.get("x")) != str(claim.get("y")))
 
 
@@ -265,6 +403,51 @@ def marks(claim: dict, files: dict[str, list[str]], n_points: int = 0, units: li
                 "oversight, so the figure is written.")
     unit = claim.get("resampling_unit")
     n_units = len(set(units)) if units else None
+    if str(claim.get("method", "")) == "bedroc_difference" and n_points:
+        # The weighted-curve figure: every mark named here, from the same helpers that drew it. The gap at the right-hand
+        # edge is the claim, so the caption says where to look and what the third line is, which is not a diagonal.
+        name_y, name_b = curve_names(claim, y)
+        n_act = claim.get("n_actives")
+        alpha = claim.get("alpha")
+        exp_ = claim.get("random_expectation")
+        return " ".join([
+            "The canvas: x axis fraction of the ranked list screened (1), y axis weighted share of the actives found (1).",
+            f"Two weighted enrichment curves over the same {n_points} rows from {where or 'the declared files'}"
+            + (f", of which {n_act} carry the positive label {claim.get('x')}" if isinstance(n_act, int) else "")
+            + "; one vertex is one distinct score value, and a block of tied scores is one step carrying the mean weight "
+              "over the positions it spans.",
+            f"The solid dark line is {name_y} ({claim.get('y_unit') or 'unit not declared'}) and the dashed grey line is "
+            f"{name_b} ({claim.get('baseline_unit') or 'unit not declared'}), both read higher-is-active; each is named in "
+            f"the key.",
+            f"Each active at list position k of N contributes exp(-alpha * k / N) with alpha = {alpha}, normalised so that "
+            f"each curve ENDS AT THAT COLUMN'S BEDROC and starts at 0 to within rounding.",
+            "The dotted line is the chance ranking, which is a CURVE and not a diagonal: it ends at the BEDROC a random "
+            + (f"ranking scores at this active fraction, {exp_}, " if exp_ is not None else "ranking scores, ")
+            + "which is what each column is read against and is not 0.5.",
+            f"The claim is the VERTICAL GAP BETWEEN THE TWO CURVES AT THE RIGHT-HAND EDGE, positive where {name_y} ends "
+            f"above {name_b}; its interval is the paired bootstrap over {n_units or '?'} {unit or 'row'}(s), stated in the "
+            f"result line above and not drawn on the canvas.",
+            "No error bars are drawn: a curve is one pass over all the rows, and the interval belongs to the difference of "
+            "the two endpoints, not to any point on either curve."])
+    if str(claim.get("method", "")) == "roc_auc_difference" and n_points:
+        # The two-curve figure: every mark on it named here, from the same helpers that drew it, because a mark defined
+        # nowhere is decoration and this canvas carries two series and a reference line.
+        name_y, name_b = curve_names(claim, y)
+        n_act = claim.get("n_actives")
+        return " ".join([
+            "The canvas: x axis false positive rate (1), y axis true positive rate (1).",
+            f"Two ROC curves over the same {n_points} rows from {where or 'the declared files'}"
+            + (f", of which {n_act} carry the positive label {claim.get('x')}" if isinstance(n_act, int) else "")
+            + "; one vertex is one distinct score value, and a block of tied scores is one step.",
+            f"The solid dark line is {name_y} ({claim.get('y_unit') or 'unit not declared'}) and the dashed grey line is "
+            f"{name_b} ({claim.get('baseline_unit') or 'unit not declared'}), both read higher-is-active; each is named in "
+            f"the key.",
+            "The dotted diagonal is chance, AUROC 0.5, which both curves are read against.",
+            f"The claim is the SIGNED AREA BETWEEN THE TWO CURVES, positive where {name_y} lies above {name_b}; its "
+            f"interval is the paired bootstrap over {n_units or '?'} {unit or 'row'}(s), stated in the result line above "
+            f"and not drawn on the canvas.",
+            "No error bars are drawn: a curve is one pass over all the rows, and the interval belongs to the difference "
+            "of the two areas, not to any point on either curve."])
     out = [axes, f"{n_points} points from {where or 'the declared files'}; one point is one row."]
     if unit and n_units and 1 < n_units <= MAX_UNIT_COLOURS:
         out.append(f"{n_units} {unit}(s), one colour per {unit}, each named in the key (matplotlib tab20).")
@@ -326,7 +509,12 @@ def pairs_for(root: Path, ctx: dict, claim: dict, sets: dict) -> tuple[list[tupl
         rows = [{**r_, **l_} for l_, r_ in pr]
     if not rows or x not in rows[0] or y not in rows[0]:
         return [], None, x, y
-    pairs, clusters, _ = _paired(rows, x, y, unit if unit and unit in rows[0] else None)
+    # A THREE-COLUMN CLAIM IS REBUILT AS ONE (`relate._paired`, `second`): the baseline travels inside the pair, so the
+    # figure is drawn from exactly the rows the verdict was computed on, three columns' worth of drops included.
+    second = str(claim.get("baseline") or "").rpartition(".")[2] or None
+    if str(claim.get("method", "")) not in PAIRED_DIFFERENCE_METHODS or not second or second not in rows[0]:
+        second = None
+    pairs, clusters, _ = _paired(rows, x, y, unit if unit and unit in rows[0] else None, second=second)
     return pairs, clusters, x, y
 
 
@@ -358,9 +546,43 @@ def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[s
 
     identity = identity_drawn(claim, pairs)
     spread = value_scatter(claim, pairs)
+    curves = two_curves(claim, pairs)
+    weighted = two_weighted_curves(claim, pairs)
     with matplotlib.rc_context({k: v for k, v in TEXT_RC.items() if k not in set_by_style}):
         fig, ax = plt.subplots(figsize=(FIG_W_IN, FIG_H_IN))
-        if pairs and spread:
+        if weighted:
+            # TWO WEIGHTED ENRICHMENT CURVES, and the claim is the vertical gap between them at the right-hand edge.
+            # Three series, so a key is required; the chance curve is what each BEDROC is read against and it is a curve
+            # and not a straight line, which is the whole difference between this canvas and the ROC one.
+            labels = [p[0] for p in pairs]
+            alpha = claim.get("alpha")
+            name_y, name_b = curve_names(claim, y)
+            for scores, name, style, colour in (([p[1][0] for p in pairs], name_y, "-", POINT_COLOUR),
+                                                ([p[1][1] for p in pairs], name_b, "--", "#8c8c8c")):
+                fx, fy = bedroc_curve(labels, scores, alpha)
+                if fx:
+                    ax.plot(fx, fy, style, lw=LINE_PT, color=colour, label=name)
+            cx, cy = bedroc_curve(labels, [p[1][0] for p in pairs], alpha, expected=True)
+            if cx:
+                ax.plot(cx, cy, ":", lw=LINE_PT, color="k", label="chance ranking")
+            if ax.get_legend_handles_labels()[1]:
+                ax.legend(loc="lower right", frameon=False)
+            ax.set_xlim(0, 1)
+        elif curves:
+            # TWO ROC CURVES, and the claim is the area between them. Two series, so a key is permitted and required; the
+            # chance diagonal is the reference line both AUROCs are read against and is defined in the commentary.
+            labels = [p[0] for p in pairs]
+            name_y, name_b = curve_names(claim, y)
+            for scores, name, style in (([p[1][0] for p in pairs], name_y, "-"), ([p[1][1] for p in pairs], name_b, "--")):
+                fx, fy = roc_points(labels, scores)
+                if fx:
+                    ax.plot(fx, fy, style, lw=LINE_PT, color=POINT_COLOUR if style == "-" else "#8c8c8c", label=name)
+            ax.plot([0, 1], [0, 1], ":", lw=LINE_PT, color="k", label="chance")
+            if ax.get_legend_handles_labels()[1]:
+                ax.legend(loc="lower right", frameon=False)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+        elif pairs and spread:
             # A one-column claim: the value up the y axis, the resampling unit along
             # the x axis. Plotting it against itself put every point on the diagonal
             # and showed nothing about the spread, which is the whole reason a value
@@ -415,7 +637,15 @@ def figure(claim: dict, pairs, clusters, x: str, y: str, files: dict[str, list[s
             if identity:
                 lo, hi = min(min(xs), min(ys)), max(max(xs), max(ys))
                 ax.plot([lo, hi], [lo, hi], "k-", lw=LINE_PT)
-        if spread:
+        if weighted:
+            # Both axes are shares, so both units are 1; the columns' own units are on neither axis and are in the commentary.
+            ax.set_xlabel("fraction of the ranked list screened (1)")
+            ax.set_ylabel("weighted share of the actives found (1)")
+        elif curves:
+            # Both axes are rates, so both units are 1; the columns' own units are on neither axis and are in the commentary.
+            ax.set_xlabel("false positive rate (1)")
+            ax.set_ylabel("true positive rate (1)")
+        elif spread:
             ax.set_xlabel(claim.get("resampling_unit") or "row (file order)")
             ax.set_ylabel(axis_label(claim, "y", y))
         else:

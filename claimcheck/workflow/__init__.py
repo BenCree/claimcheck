@@ -25,10 +25,41 @@ be able to check that claim without reading the rules.
 
 from pathlib import Path
 
-__all__ = ["RULES", "declared_files", "interpreter"]
+__all__ = ["RULES", "NON_VERDICT_SECTIONS", "PROSE_KEYS", "declared_files",
+           "interpreter", "verdict_digest"]
 
 #: Absolute path to the shared rules, for `include:`.
 RULES = str(Path(__file__).with_name("claims.smk"))
+
+#: The only tables of `context.toml` left OUT of the digest, because each is the
+#: input of its own rule: `belief` and `jobs` are consumed by rules that take
+#: `results/claims.json` as an input and so are recomputed whenever a verdict is.
+#:
+#: EVERYTHING ELSE IS IN, AND THAT IS DELIBERATE. Naming the four tables `relate`
+#: reads today (`project`, `datasets`, `variables`, `relationships`) would be an
+#: allowlist, and a table added later would then be silently undigested, which is
+#: the defect this digest exists to close. The cost is already visible: a
+#: `[units]` table appears in two of the tree's declarations (for example
+#: `/home/ben/code/projects/water-network/experiments/mace_polar_charge_solvation_funnel/context.toml`),
+#: nothing in this package reads it, and it is digested anyway.
+NON_VERDICT_SECTIONS = frozenset({"belief", "jobs"})
+
+#: Keys inside the digested tables that NO computation reads: prose for a person.
+#:
+#: A DENYLIST AND NOT AN ALLOWLIST, which is the whole safety argument. An
+#: estimator added to `relate` brings new claim keys with it (`alpha`,
+#: `tie_tol`, `baseline`, `group`, `interval`, `event` each arrived this way),
+#: and a key nobody listed here is digested, so a claim registered with it
+#: retriggers its own adjudication. An allowlist would silently fail to, which
+#: is the defect this digest exists to close.
+#:
+#: `evidence.source` is DELIBERATELY NOT HERE, though it is prose: a control
+#: label at the start of it is what `claimcheck.scrutiny` matches to raise
+#: `refuted_control` (`claimcheck/scrutiny.py:402`), and that warning travels in
+#: `results/claims.json`. `evidence.note` is here, and it is the key this lab
+#: edits constantly.
+PROSE_KEYS = frozenset({"note", "notes", "comment", "comments", "description",
+                        "title"})
 
 
 def declared_files(root: Path | str) -> list[str]:
@@ -53,6 +84,70 @@ def declared_files(root: Path | str) -> list[str]:
             if not str(f).startswith("results/") and f not in out:
                 out.append(f)
     return out
+
+
+def _without_prose(value):
+    """`value` with every prose key dropped, at any depth."""
+    if isinstance(value, dict):
+        return {k: _without_prose(v) for k, v in value.items()
+                if k not in PROSE_KEYS}
+    if isinstance(value, list):
+        return [_without_prose(v) for v in value]
+    return value
+
+
+def verdict_digest(root: Path | str) -> str:
+    """What a verdict is computed from, as one token, for a rerun trigger.
+
+    EDITING A CLAIMED VALUE MUST RE-ADJUDICATE THE CLAIM. It did not. The shared
+    `check_claims` rule takes `context.toml` as `ancient()`, which tells
+    Snakemake to ignore its modification time, so changing `claimed`, `method`,
+    `resampling_unit`, `x`, `y` or `baseline` left `results/claims.json` in
+    place: a verdict computed from the previous declaration, carrying a
+    `context_sha256` that no longer matched the file beside it. That breaks the
+    one link the field exists to certify, and it defeated the legitimate case
+    the rules REQUIRE, where a badly designed claim is kept and a dated
+    replacement registered beside it.
+
+    Removing `ancient()` would have fixed it at a price nobody would pay: every
+    edit to the declaration would re-adjudicate, and the edit this lab makes
+    most often is an `evidence.note`, which changes no number. A rule that
+    re-runs a 49-minute adjudication for a sentence of prose is a rule somebody
+    turns off. Worse, it would not even work where this lab needs it most:
+    campaigns here run with `--rerun-triggers code input params software-env`,
+    which drops mtime so a script edit cannot delete a running campaign's
+    outputs, and under that set an mtime edge is dead. Measured on
+    `/home/ben/code/projects/affinity-scoring/experiments/a71_scorer_cost`,
+    2026-11-22: the param fires with mtime dropped and does not fire under
+    `--rerun-triggers mtime`, which is the one trigger set that defeats it.
+
+    So the trigger is this digest, declared as a `params` value of
+    `check_claims`: `params` is one of Snakemake's default rerun triggers, it is
+    compared against the value recorded in the metadata store for the output,
+    and `ancient()` stays, so the modification time still does not count.
+
+    It is the sha256 of the declaration with `NON_VERDICT_SECTIONS` and
+    `PROSE_KEYS` dropped, as canonical JSON, to 16 hex characters, which is the
+    width this package uses for `relate_sha256` and `context_sha256`. Parsing
+    rather than digesting the bytes is also what makes a comment, a blank line
+    and a reordered key free: `tomllib` never reports them.
+
+    Returned with its name on it, because the value is read by whoever opens
+    `.snakemake/metadata/<output>` and a bare hash there says nothing.
+    """
+    import hashlib
+    import json
+    import tomllib
+
+    ctx = tomllib.loads((Path(root) / "context.toml").read_text())
+    body = {k: _without_prose(v) for k, v in ctx.items()
+            if k not in NON_VERDICT_SECTIONS}
+    # `default=str`: TOML has dates and `retrieved = 2026-08-15` is a real one.
+    # `sort_keys`: a reordered table is not a different declaration.
+    canonical = json.dumps(body, sort_keys=True, default=str,
+                           separators=(",", ":"))
+    return ("context-verdict-fields:"
+            + hashlib.sha256(canonical.encode()).hexdigest()[:16])
 
 
 #: Modules the emitters need and `relate` does not. `graph`, `dcat` and
